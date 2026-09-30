@@ -3,8 +3,8 @@
 A macOS-style dock, Finder bar, Launchpad, Stage Manager and genie minimize for GNOME Shell.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Latest release](https://img.shields.io/github/v/release/jay-p/MyDock-Linux)](https://github.com/jay-p/MyDock-Linux/releases/latest)
-[![Build](https://github.com/jay-p/MyDock-Linux/actions/workflows/build.yml/badge.svg)](https://github.com/jay-p/MyDock-Linux/actions/workflows/build.yml)
+[![Latest release](https://img.shields.io/github/v/release/Icyubahiro-Jay-P/MyDock-Linux)](https://github.com/Icyubahiro-Jay-P/MyDock-Linux/releases/latest)
+[![Build](https://github.com/Icyubahiro-Jay-P/MyDock-Linux/actions/workflows/build.yml/badge.svg)](https://github.com/Icyubahiro-Jay-P/MyDock-Linux/actions/workflows/build.yml)
 
 <!-- Maintainer: add a screenshot at docs/screenshot.png (dock + Finder bar, ideally in dark mode), then uncomment:
 ![MY DOCK FINDER FOR LINUX](docs/screenshot.png)
@@ -13,7 +13,7 @@ A macOS-style dock, Finder bar, Launchpad, Stage Manager and genie minimize for 
 ## Install (one line)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jay-p/MyDock-Linux/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Icyubahiro-Jay-P/MyDock-Linux/main/install.sh | bash
 ```
 
 Then **log out and back in**. Nothing needs sudo. Want to read the script first? It is [install.sh](install.sh); it downloads the latest release asset `dock-install.sh` and runs it.
@@ -25,6 +25,7 @@ Then **log out and back in**. Nothing needs sudo. Want to read the script first?
 - **Launchpad**: full-screen app grid, opened from the dock or with **Ctrl+Super+A**.
 - **Stage Manager**: a strip of recent window groups on the side of the screen. Off by default.
 - **Minimize effects**: genie, suck, scale or none, with adjustable duration.
+- **Window buttons on the left**: close, minimize and maximize move to the left of the title bar in macOS order, with optional red, yellow and green traffic light colors for GTK apps. Your old layout comes back when you turn it off.
 - **Themes and dark mode**: follow the system color scheme or force light or dark; load your own theme folder.
 
 ## Requirements
@@ -39,10 +40,10 @@ GNOME 49 and 50 (Ubuntu 25.10 / 26.04) are **not tested**. See [Compatibility](#
 
 ### .deb package (Ubuntu, Debian)
 
-Download `dock_1.0.0_all.deb` from the [Releases page](https://github.com/jay-p/MyDock-Linux/releases), then:
+Download `dock_<version>_all.deb` (for example `dock_1.0.0_all.deb`) from the [Releases page](https://github.com/Icyubahiro-Jay-P/MyDock-Linux/releases), then:
 
 ```bash
-sudo apt install ./dock_1.0.0_all.deb
+sudo apt install ./dock_<version>_all.deb
 dock            # run as your normal user, not with sudo
 ```
 
@@ -50,7 +51,7 @@ dock            # run as your normal user, not with sudo
 
 ### Single-file installer
 
-Download `dock-install.sh` from the [Releases page](https://github.com/jay-p/MyDock-Linux/releases), then:
+Download `dock-install.sh` from the [Releases page](https://github.com/Icyubahiro-Jay-P/MyDock-Linux/releases), then:
 
 ```bash
 bash dock-install.sh
@@ -61,7 +62,7 @@ To check the download, get `SHA256SUMS` from the same release and run `sha256sum
 ### From source
 
 ```bash
-git clone https://github.com/jay-p/MyDock-Linux.git
+git clone https://github.com/Icyubahiro-Jay-P/MyDock-Linux.git
 cd MyDock-Linux
 ./build.sh
 bash dist/dock-install.sh
@@ -71,7 +72,7 @@ See [Building](#building) for what `build.sh` needs.
 
 ## What the installer does
 
-- Installs to `~/.local/share/gnome-shell/extensions/mydock@jay-p` and enables it for your user.
+- Installs to `~/.local/share/gnome-shell/extensions/mydock@jay-p` and enables it for your user. The ID `mydock@jay-p` is historical and stays the same so updates and your settings keep working.
 - Turns off **Ubuntu Dock**, **Dash to Dock** and **Dash2Dock Lite** if they are installed, and remembers which ones it turned off.
 - Warns if a minimize-effect extension is enabled (see [Compatibility](#compatibility)).
 - You then log out and back in, because Wayland cannot reload the shell in place.
@@ -82,7 +83,7 @@ Uninstalling removes MY DOCK FINDER FOR LINUX and turns your previous dock back 
 
 | Installed with | Uninstall with |
 | --- | --- |
-| One-liner | `curl -fsSL https://raw.githubusercontent.com/jay-p/MyDock-Linux/main/install.sh \| bash -s -- --uninstall` |
+| One-liner | `curl -fsSL https://raw.githubusercontent.com/Icyubahiro-Jay-P/MyDock-Linux/main/install.sh \| bash -s -- --uninstall` |
 | .deb | `dock --uninstall` then `sudo apt remove dock` |
 | Single file | `bash dock-install.sh --uninstall` |
 | Source | `bash dist/dock-install.sh --uninstall` |
@@ -124,6 +125,8 @@ Every setting applies live. Key settings (schema `org.gnome.shell.extensions.myd
 | Finder bar | `logo-path` | `''` | Custom top-left logo image (empty = distributor logo) |
 | Launchpad | `launchpad-hotkey` | `['<Control><Super>a']` | Launchpad shortcut |
 | Stage Manager | `stage-manager` | `false` | Turn Stage Manager on |
+| Windows | `window-buttons-left` | `true` | Close, minimize, maximize on the left (macOS order) |
+| Windows | `traffic-lights` | `false` | Red, yellow and green buttons in GTK apps |
 | Effects | `minimize-effect` | `'genie'` | `none`, `scale`, `genie` or `suck` |
 | Effects | `minimize-duration` | `450` | Animation length in ms |
 | Themes | `theme-path` | `''` | Theme folder (empty = built-in default) |
@@ -145,6 +148,7 @@ A theme is a folder with a `stylesheet.css` and an optional `icons/` folder. Ico
 
 - **Other docks**: Ubuntu Dock, Dash to Dock and Dash2Dock Lite are turned off on install and restored on uninstall. Other dock extensions may conflict; disable them yourself.
 - **Minimize effects**: Magic Lamp, Burn My Windows and Compiz windows effect also animate minimize. Turn them off, or set MY DOCK FINDER FOR LINUX's minimize effect to `none`.
+- **Window buttons**: `window-buttons-left` changes the GNOME setting `org.gnome.desktop.wm.preferences button-layout` and restores your previous value when turned off or uninstalled. `traffic-lights` adds a marked block to `~/.config/gtk-3.0/gtk.css` and `~/.config/gtk-4.0/gtk.css` and removes only that block when turned off. GTK and libadwaita apps pick up the colors when they next start; Firefox, Chrome, Electron and Qt apps draw their own title bars and may not follow.
 - **GNOME 49 / 50** (Ubuntu 25.10 / 26.04): not tested. The extension only declares support for 46 to 48. Reports from newer versions are welcome.
 
 ## Troubleshooting
@@ -168,7 +172,7 @@ Common issues:
 - **Double minimize animation**: see [Compatibility](#compatibility).
 - **Extension shows as "out of date"**: your GNOME Shell version is outside 46 to 48.
 
-If none of that helps, [open a bug report](https://github.com/jay-p/MyDock-Linux/issues/new?template=bug_report.md) with the log output.
+If none of that helps, [open a bug report](https://github.com/Icyubahiro-Jay-P/MyDock-Linux/issues/new?template=bug_report.md) with the log output.
 
 ## Building
 
@@ -187,6 +191,10 @@ node extension/version.test.mjs
 ```
 
 CI (`.github/workflows/build.yml`) runs the tests, shellcheck and the build on every push and pull request. Pushing a tag like `v1.0.0` creates a GitHub Release with both files attached.
+
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for the macOS features that are planned next and how each one will be built.
 
 ## Contributing
 

@@ -61,8 +61,8 @@ representative at an online or offline event.
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported privately to the project maintainer via GitHub, for example by opening
 a private report at
-https://github.com/jay-p/MyDock-Linux/security/advisories/new
-or by contacting [@jay-p](https://github.com/jay-p) on GitHub.
+https://github.com/Icyubahiro-Jay-P/MyDock-Linux/security/advisories/new
+or by contacting [@Icyubahiro-Jay-P](https://github.com/Icyubahiro-Jay-P) on GitHub.
 All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the

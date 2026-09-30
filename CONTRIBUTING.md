@@ -14,7 +14,7 @@ You need GNOME Shell 46, 47 or 48, plus:
 Build and install your working copy:
 
 ```bash
-git clone https://github.com/jay-p/MyDock-Linux.git
+git clone https://github.com/Icyubahiro-Jay-P/MyDock-Linux.git
 cd MyDock-Linux
 ./build.sh
 bash dist/dock-install.sh
@@ -62,6 +62,7 @@ extension/
   launchpad.js              app grid and hotkey
   stagemanager.js           Stage Manager strip
   minimize.js               minimize animations
+  windowbuttons.js          window buttons on the left, traffic light colors
   deform-math.js            pure math for genie/suck (tested by deform-math.test.mjs)
   prefs.js                  settings window, rows generated from tables
   schemas/                  GSettings schema

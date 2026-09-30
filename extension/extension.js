@@ -14,6 +14,7 @@ import {Launchpad} from './launchpad.js';
 import {StageManager} from './stagemanager.js';
 import {MinimizeEffects} from './minimize.js';
 import {Updater} from './updater.js';
+import {WindowButtons} from './windowbuttons.js';
 
 // [property on ext, class, setting that toggles it (null = always on)]
 const FEATURES = [
@@ -22,6 +23,7 @@ const FEATURES = [
     ['finderbar', FinderBar, 'finderbar-enabled'],
     ['stageManager', StageManager, 'stage-manager'],
     ['minimize', MinimizeEffects, null],
+    ['windowButtons', WindowButtons, 'window-buttons-left'],
     ['updater', Updater, 'check-updates'],
 ];
 

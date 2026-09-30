@@ -12,8 +12,8 @@ import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
 import {compareVersions} from './version.js';
 
 // MYDOCK_UPDATE_* overrides are for testing against a local fake release.
-const API = GLib.getenv('MYDOCK_UPDATE_API') ?? 'https://api.github.com/repos/jay-p/MyDock-Linux/releases/latest';
-const BASE = GLib.getenv('MYDOCK_UPDATE_BASE') ?? 'https://github.com/jay-p/MyDock-Linux/releases/download';
+const API = GLib.getenv('MYDOCK_UPDATE_API') ?? 'https://api.github.com/repos/Icyubahiro-Jay-P/MyDock-Linux/releases/latest';
+const BASE = GLib.getenv('MYDOCK_UPDATE_BASE') ?? 'https://github.com/Icyubahiro-Jay-P/MyDock-Linux/releases/download';
 const FIRST_DELAY = Number(GLib.getenv('MYDOCK_UPDATE_DELAY') ?? 60); // s after login, keeps startup fast
 const RECHECK = 6 * 3600; // s between "is a check due?" wake-ups
 const DAY = 24 * 3600;
