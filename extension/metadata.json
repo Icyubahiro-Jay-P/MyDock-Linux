@@ -1,0 +1,10 @@
+{
+  "uuid": "mydock@jay-p",
+  "name": "MY DOCK FINDER FOR LINUX",
+  "description": "macOS-style dock, Finder bar, Launchpad, Stage Manager and genie minimize for GNOME.",
+  "shell-version": ["46", "47", "48"],
+  "settings-schema": "org.gnome.shell.extensions.mydock",
+  "version": 1,
+  "version-name": "1.0.0",
+  "url": "https://github.com/jay-p/MyDock-Linux"
+}

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <enum id="org.gnome.shell.extensions.mydock.minimize-effect">
+    <value nick="none" value="0"/>
+    <value nick="scale" value="1"/>
+    <value nick="genie" value="2"/>
+    <value nick="suck" value="3"/>
+  </enum>
+  <schema id="org.gnome.shell.extensions.mydock" path="/org/gnome/shell/extensions/mydock/">
+    <!-- Dock -->
+    <key name="dock-enabled" type="b"><default>true</default><summary>Show the dock</summary></key>
+    <key name="icon-size" type="i"><range min="24" max="128"/><default>60</default><summary>Icon size</summary></key>
+    <key name="max-size" type="i"><range min="24" max="192"/><default>75</default><summary>Magnified icon size</summary></key>
+    <key name="magnify" type="b"><default>true</default><summary>Magnify on hover</summary></key>
+    <key name="icon-space" type="i"><range min="0" max="40"/><default>8</default><summary>Space between icons</summary></key>
+    <key name="edge-distance" type="i"><range min="0" max="64"/><default>4</default><summary>Gap between dock and screen edge</summary></key>
+    <key name="blur" type="i"><range min="0" max="60"/><default>15</default><summary>Background blur radius</summary></key>
+    <key name="opacity" type="i"><range min="0" max="100"/><default>45</default><summary>Background opacity (percent)</summary></key>
+    <key name="autohide" type="b"><default>false</default><summary>Auto-hide the dock</summary></key>
+    <key name="multi-monitor" type="b"><default>true</default><summary>Dock on every monitor</summary></key>
+    <key name="bounce-on-launch" type="b"><default>true</default><summary>Bounce icon while app starts</summary></key>
+    <key name="show-labels" type="b"><default>true</default><summary>Show app name tooltip on hover</summary></key>
+    <key name="show-running-dots" type="b"><default>true</default><summary>Dot under running apps</summary></key>
+    <key name="show-launchpad" type="b"><default>true</default><summary>Launchpad icon in dock</summary></key>
+    <key name="show-trash" type="b"><default>true</default><summary>Trash icon in dock</summary></key>
+    <key name="show-calendar" type="b"><default>true</default><summary>Live calendar icon in dock</summary></key>
+    <key name="show-clock" type="b"><default>false</default><summary>Live clock icon in dock</summary></key>
+    <!-- Finder bar -->
+    <key name="finderbar-enabled" type="b"><default>true</default><summary>macOS-style top bar</summary></key>
+    <key name="finderbar-blur" type="b"><default>true</default><summary>Translucent blurred top bar</summary></key>
+    <key name="time-format" type="s"><default>'%a %-d %b  %-I:%M %p'</default><summary>Top bar clock format (GLib strftime)</summary></key>
+    <key name="logo-path" type="s"><default>''</default><summary>Custom logo image for the top-left menu (empty = distributor logo icon)</summary></key>
+    <!-- Launchpad -->
+    <key name="launchpad-hotkey" type="as"><default>['&lt;Control&gt;&lt;Super&gt;a']</default><summary>Open Launchpad</summary></key>
+    <!-- Stage Manager -->
+    <key name="stage-manager" type="b"><default>false</default><summary>Stage Manager on</summary></key>
+    <key name="stage-count" type="i"><range min="1" max="10"/><default>5</default><summary>Max groups in the strip</summary></key>
+    <key name="stage-size" type="i"><range min="60" max="300"/><default>126</default><summary>Thumbnail width</summary></key>
+    <key name="stage-show-title" type="b"><default>true</default><summary>Show window titles in strip</summary></key>
+    <!-- Effects -->
+    <key name="minimize-effect" enum="org.gnome.shell.extensions.mydock.minimize-effect"><default>'genie'</default><summary>Minimize animation</summary></key>
+    <key name="minimize-duration" type="i"><range min="100" max="2000"/><default>450</default><summary>Minimize animation length (ms)</summary></key>
+    <!-- Themes -->
+    <key name="theme-path" type="s"><default>''</default><summary>Theme folder (stylesheet.css + icons/). Empty = built-in default</summary></key>
+    <key name="dark-mode" type="i"><range min="0" max="2"/><default>0</default><summary>0 follow system, 1 light, 2 dark</summary></key>
+    <!-- Updates -->
+    <key name="check-updates" type="b"><default>true</default><summary>Check GitHub once a day for a new MyDock release</summary></key>
+    <key name="last-update-check" type="x"><default>0</default><summary>Unix time of the last update check (internal)</summary></key>
+    <key name="skipped-version" type="s"><default>''</default><summary>Release the user chose to skip (internal)</summary></key>
+  </schema>
+</schemalist>

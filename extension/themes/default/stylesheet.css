@@ -1,0 +1,201 @@
+/* MyDock default theme. Copy this folder and point Settings > Themes at it to make your own. */
+
+/* ---- dock ---- */
+/* ---- Dock ---- */
+/* Panel tint. Its actor opacity comes from the `opacity` setting, so colors here are solid. */
+.mydock-bg {
+  border-radius: 18px;
+  background-color: rgb(246, 246, 248);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+.mydock-dark .mydock-bg {
+  background-color: rgb(40, 40, 44);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.mydock-item {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #1c1c1e;
+}
+.mydock-dark .mydock-item { color: #f2f2f7; }
+
+.mydock-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 3px;
+  background-color: rgba(0, 0, 0, 0.75);
+}
+.mydock-dark .mydock-dot { background-color: rgba(255, 255, 255, 0.85); }
+
+.mydock-separator {
+  width: 1px;
+  margin: 0 4px;
+  background-color: rgba(0, 0, 0, 0.25);
+}
+.mydock-dark .mydock-separator { background-color: rgba(255, 255, 255, 0.3); }
+
+.mydock-label {
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 10.5pt;
+  color: #1c1c1e;
+  background-color: rgba(240, 240, 242, 0.95);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+.mydock-dark .mydock-label {
+  color: #f2f2f7;
+  background-color: rgba(44, 44, 48, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Live calendar icon (font sizes are set inline relative to icon size) */
+.mydock-calendar {
+  background-color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.mydock-calendar-dow {
+  color: #ff3b30;
+  font-weight: bold;
+}
+.mydock-calendar-day {
+  color: #1c1c1e;
+  font-weight: 300;
+}
+
+/* ---- Launchpad (class is on Main.layoutManager.overviewGroup while open) ---- */
+.mydock-launchpad .overview-tile .overview-icon-label,
+.mydock-launchpad .app-well-app .overview-icon-label {
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.mydock-launchpad .page-indicator .page-indicator-icon {
+  background-color: rgba(255, 255, 255, 0.8);
+}
+
+/* ---- finderbar ---- */
+/* Finder bar: macOS-like top bar. Light/dark follows .mydock-light / .mydock-dark on Main.uiGroup. */
+
+#panel.mydock-finderbar,
+#panel.mydock-finderbar:overview {
+    font-weight: normal;
+    transition-duration: 250ms;
+}
+
+/* opaque (finderbar-blur off) */
+.mydock-light #panel.mydock-finderbar,
+.mydock-light #panel.mydock-finderbar:overview {
+    background-color: rgb(236, 236, 236);
+}
+.mydock-dark #panel.mydock-finderbar,
+.mydock-dark #panel.mydock-finderbar:overview {
+    background-color: rgb(34, 34, 36);
+}
+
+/* translucent over the Shell.BlurEffect (finderbar-blur on); overview keeps a tint so text stays readable */
+.mydock-light #panel.mydock-finderbar.mydock-finderbar-blur,
+.mydock-light #panel.mydock-finderbar.mydock-finderbar-blur:overview {
+    background-color: rgba(246, 246, 246, 0.55);
+}
+.mydock-dark #panel.mydock-finderbar.mydock-finderbar-blur,
+.mydock-dark #panel.mydock-finderbar.mydock-finderbar-blur:overview {
+    background-color: rgba(28, 28, 30, 0.5);
+}
+
+/* text + icon colors */
+.mydock-light #panel.mydock-finderbar .panel-button,
+.mydock-light #panel.mydock-finderbar .panel-button .clock,
+.mydock-light #panel.mydock-finderbar .panel-button .system-status-icon {
+    color: #1d1d1f;
+}
+.mydock-dark #panel.mydock-finderbar .panel-button,
+.mydock-dark #panel.mydock-finderbar .panel-button .clock,
+.mydock-dark #panel.mydock-finderbar .panel-button .system-status-icon {
+    color: #f5f5f7;
+}
+
+#panel.mydock-finderbar .panel-button {
+    font-weight: normal;
+    border-radius: 6px;
+}
+
+.mydock-light #panel.mydock-finderbar .panel-button:hover,
+.mydock-light #panel.mydock-finderbar .panel-button:active,
+.mydock-light #panel.mydock-finderbar .panel-button:checked {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+.mydock-dark #panel.mydock-finderbar .panel-button:hover,
+.mydock-dark #panel.mydock-finderbar .panel-button:active,
+.mydock-dark #panel.mydock-finderbar .panel-button:checked {
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+/* logo */
+#panel.mydock-finderbar .mydock-logo-button {
+    -natural-hpadding: 10px;
+    -minimum-hpadding: 6px;
+}
+#panel.mydock-finderbar .mydock-logo-icon {
+    icon-size: 16px;
+}
+
+/* focused app name */
+#panel.mydock-finderbar .mydock-appname {
+    font-weight: bold;
+}
+
+/* clock */
+#panel.mydock-finderbar .mydock-clock {
+    font-weight: normal;
+    font-feature-settings: "tnum";
+}
+
+/* ---- stagemanager ---- */
+/* Stage Manager strip (stagemanager.js) */
+.mydock-stage-strip {
+    padding: 10px 8px;
+    spacing: 18px;
+    border-radius: 18px;
+}
+.mydock-dark .mydock-stage-strip {
+    background-color: rgba(30, 30, 32, 0.35);
+}
+.mydock-light .mydock-stage-strip {
+    background-color: rgba(250, 250, 252, 0.35);
+}
+
+.mydock-stage-group {
+    padding: 6px;
+    border-radius: 12px;
+    background-color: transparent;
+    transition-duration: 150ms;
+}
+.mydock-dark .mydock-stage-group:hover,
+.mydock-dark .mydock-stage-group:focus {
+    background-color: rgba(255, 255, 255, 0.10);
+}
+.mydock-light .mydock-stage-group:hover,
+.mydock-light .mydock-stage-group:focus {
+    background-color: rgba(0, 0, 0, 0.08);
+}
+
+.mydock-stage-group-box {
+    spacing: 6px;
+}
+
+.mydock-stage-label-row {
+    spacing: 6px;
+}
+
+.mydock-stage-title {
+    font-size: 11px;
+    font-weight: 500;
+}
+.mydock-dark .mydock-stage-title {
+    color: rgba(255, 255, 255, 0.92);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.mydock-light .mydock-stage-title {
+    color: rgba(0, 0, 0, 0.85);
+}

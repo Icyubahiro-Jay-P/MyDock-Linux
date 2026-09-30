@@ -1,0 +1,36 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends shellcheck libglib2.0-bin
+      - run: node extension/deform-math.test.mjs && node extension/version.test.mjs
+      - run: shellcheck install.sh install-stub.sh build.sh
+      - run: ./build.sh && (cd dist && sha256sum dock-install.sh ./*.deb > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          want="v$(python3 -c 'import json; print(json.load(open("extension/metadata.json"))["version-name"])')"
+          [[ "$GITHUB_REF_NAME" == "$want" ]] || { echo "Tag $GITHUB_REF_NAME does not match metadata version-name ($want)"; exit 1; }
+          gh release create "$GITHUB_REF_NAME" dist/dock-install.sh dist/*.deb dist/SHA256SUMS --generate-notes

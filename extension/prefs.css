@@ -1,0 +1,71 @@
+/* MyDock settings: macOS System Settings look. Named libadwaita colors keep light/dark working. */
+
+.mydock-prefs .mydock-badge {
+    min-width: 24px;
+    min-height: 24px;
+    border-radius: 6px;
+    color: white;
+    box-shadow: inset 0 0 0 1px alpha(black, 0.06);
+}
+.mydock-prefs .mydock-blue   { background-image: linear-gradient(to bottom, #3fa0ff, #0a6ff0); }
+.mydock-prefs .mydock-grey   { background-image: linear-gradient(to bottom, #a4a4aa, #7c7c82); }
+.mydock-prefs .mydock-purple { background-image: linear-gradient(to bottom, #c77df0, #9a3fd0); }
+.mydock-prefs .mydock-orange { background-image: linear-gradient(to bottom, #ffb340, #ff8a00); }
+.mydock-prefs .mydock-pink   { background-image: linear-gradient(to bottom, #ff5c80, #f0224f); }
+.mydock-prefs .mydock-green  { background-image: linear-gradient(to bottom, #4cd970, #28b14c); }
+
+/* Sidebar: compact rows, accent blue selection with rounded corners */
+.mydock-prefs .mydock-sidebar > row {
+    min-height: 32px;
+    padding: 3px 8px;
+    border-radius: 7px;
+}
+.mydock-prefs .mydock-sidebar > row:selected,
+.mydock-prefs .mydock-sidebar > row:selected:hover {
+    background-color: @accent_bg_color;
+    color: @accent_fg_color;
+}
+
+/* Content */
+.mydock-prefs .mydock-page-title {
+    font-size: 15pt;
+    font-weight: 700;
+    margin-left: 6px;
+}
+.mydock-prefs .boxed-list,
+.mydock-prefs .card {
+    border-radius: 10px;
+}
+.mydock-prefs .boxed-list > row {
+    min-height: 44px;
+}
+.mydock-prefs .mydock-footnote {
+    margin-top: 8px;
+    margin-left: 12px;
+    margin-right: 12px;
+}
+
+/* About */
+.mydock-prefs .mydock-hero {
+    padding: 24px 24px 20px 24px;
+}
+.mydock-prefs .mydock-hero-icon {
+    min-width: 80px;
+    min-height: 80px;
+    border-radius: 18px;
+    margin-bottom: 6px;
+    box-shadow: 0 2px 8px alpha(black, 0.18);
+}
+
+/* Dock preview */
+.mydock-prefs .mydock-preview {
+    border-radius: 12px;
+    background-image: linear-gradient(160deg, #3a6fd8 0%, #7a5ce0 45%, #e87fa8 100%);
+}
+.mydock-prefs .mydock-preview-dock {
+    padding: 6px 8px;
+    border-radius: 18px;
+    background-color: alpha(white, 0.32);
+    border: 1px solid alpha(white, 0.45);
+    box-shadow: 0 6px 18px alpha(black, 0.22);
+}
