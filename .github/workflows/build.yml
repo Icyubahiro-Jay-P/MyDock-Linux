@@ -33,4 +33,10 @@ jobs:
         run: |
           want="v$(python3 -c 'import json; print(json.load(open("extension/metadata.json"))["version-name"])')"
           [[ "$GITHUB_REF_NAME" == "$want" ]] || { echo "Tag $GITHUB_REF_NAME does not match metadata version-name ($want)"; exit 1; }
-          gh release create "$GITHUB_REF_NAME" dist/dock-install.sh dist/*.deb dist/SHA256SUMS --generate-notes
+          files=(dist/dock-install.sh dist/*.deb dist/SHA256SUMS)
+          # Release drafted in the GitHub UI already exists: attach the files to it.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${files[@]}" --generate-notes
+          fi
