@@ -21,6 +21,10 @@ const PAGES = [
         ['Menu and clock', ['logo-path', 'time-format'],
             'The clock uses GLib strftime codes, for example %a %-d %b  %-I:%M %p.'],
     ]],
+    ['Windows', 'focus-windows-symbolic', 'red', [
+        ['Title bar buttons', ['window-buttons-left', 'traffic-lights'],
+            'Puts close, minimize and maximize on the left like macOS. Traffic light colors apply to GTK apps you open next; restart open apps to see them.'],
+    ]],
     ['Stage Manager', 'view-dual-symbolic', 'purple', [
         ['', ['stage-manager'],
             'Stage Manager keeps the current window in the center and arranges your other windows in a strip on the left.'],
@@ -62,6 +66,8 @@ const TITLES = {
     'finderbar-blur': 'Translucent background',
     'logo-path': 'Menu logo',
     'time-format': 'Clock format',
+    'window-buttons-left': 'Buttons on the left (macOS order)',
+    'traffic-lights': 'Red, yellow and green buttons',
     'stage-manager': 'Stage Manager',
     'stage-count': 'Groups in the strip',
     'stage-size': 'Thumbnail width',
@@ -91,6 +97,7 @@ const PATH_ROWS = {'logo-path': 'file', 'theme-path': 'folder'};
 const DEPENDS = {
     'max-size': 'magnify',
     'finderbar-blur': 'finderbar-enabled',
+    'traffic-lights': 'window-buttons-left',
     'stage-count': 'stage-manager',
     'stage-size': 'stage-manager',
     'stage-show-title': 'stage-manager',

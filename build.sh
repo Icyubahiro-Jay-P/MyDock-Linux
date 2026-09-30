@@ -18,7 +18,7 @@ mkdir -p "$ext" "$root/usr/bin" "$root/usr/share/doc/dock" "$root/DEBIAN"
 tar cf - -C extension "${EXCL[@]}" . | tar xf - -C "$ext"
 glib-compile-schemas "$ext/schemas"
 cp install-stub.sh "$root/usr/bin/dock"
-{ echo "MY DOCK FINDER FOR LINUX - https://github.com/jay-p/MyDock-Linux"; echo
+{ echo "MY DOCK FINDER FOR LINUX - https://github.com/Icyubahiro-Jay-P/MyDock-Linux"; echo
   if [[ -f LICENSE ]]; then cat LICENSE
   else echo "MIT License. Copyright (c) 2026 Irakoze Icyubahiro Jean Pierre"; fi; } > "$root/usr/share/doc/dock/copyright"
 cat > "$root/DEBIAN/control" <<CTL
@@ -28,8 +28,8 @@ Section: gnome
 Priority: optional
 Architecture: all
 Depends: gnome-shell (>= 46), gnome-shell (<< 49), python3, libglib2.0-bin
-Maintainer: jay-p <jay-p@users.noreply.github.com>
-Homepage: https://github.com/jay-p/MyDock-Linux
+Maintainer: Icyubahiro-Jay-P <icyubahiro-jay-p@users.noreply.github.com>
+Homepage: https://github.com/Icyubahiro-Jay-P/MyDock-Linux
 Description: macOS-style dock for GNOME Shell
  MY DOCK FINDER FOR LINUX adds a macOS-style dock, Finder bar, Launchpad, Stage Manager and
  genie minimize to GNOME Shell. Run dock once per user to enable it.

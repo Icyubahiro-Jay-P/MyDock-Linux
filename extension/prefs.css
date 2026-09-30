@@ -13,6 +13,7 @@
 .mydock-prefs .mydock-orange { background-image: linear-gradient(to bottom, #ffb340, #ff8a00); }
 .mydock-prefs .mydock-pink   { background-image: linear-gradient(to bottom, #ff5c80, #f0224f); }
 .mydock-prefs .mydock-green  { background-image: linear-gradient(to bottom, #4cd970, #28b14c); }
+.mydock-prefs .mydock-red    { background-image: linear-gradient(to bottom, #ff6b5f, #e0382c); }
 
 /* Sidebar: compact rows, accent blue selection with rounded corners */
 .mydock-prefs .mydock-sidebar > row {

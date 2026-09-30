@@ -33,8 +33,26 @@ for key, want in (("enabled-extensions", on), ("disabled-extensions", not on)):
 PY
 }
 
+# Undo the window button changes in case the shell is not running to do it on disable.
+restore_windows() {
+    local dir="$DEST/schemas" saved
+    [[ -f "$dir/gschemas.compiled" ]] || dir="$SYS/schemas"
+    if [[ -f "$dir/gschemas.compiled" ]] &&
+        saved=$(gsettings --schemadir "$dir" get org.gnome.shell.extensions.mydock saved-button-layout 2>/dev/null) &&
+        [[ "$saved" != "''" ]]; then
+        gsettings set org.gnome.desktop.wm.preferences button-layout "$saved"
+        gsettings --schemadir "$dir" reset org.gnome.shell.extensions.mydock saved-button-layout
+    fi
+    local f
+    for f in "${XDG_CONFIG_HOME:-$HOME/.config}"/gtk-{3,4}.0/gtk.css; do
+        [[ -f "$f" ]] && sed -i '/mydock-traffic-lights start/,/mydock-traffic-lights end/d' "$f"
+    done
+    return 0
+}
+
 if [[ "${1:-}" == "--uninstall" ]]; then
     set_enabled "$UUID" off
+    restore_windows
     rm -rf "$DEST"
     if [[ -f "$STATE" ]]; then
         while read -r u; do [[ -n "$u" ]] && set_enabled "$u" on; done < "$STATE"
@@ -48,7 +66,7 @@ fi
 command -v gnome-shell >/dev/null || { echo "GNOME Shell not found. MY DOCK FINDER FOR LINUX needs GNOME." >&2; exit 1; }
 ver=$(gnome-shell --version | grep -oE '[0-9]+' | head -1)
 (( ver >= MIN_SHELL )) || { echo "GNOME Shell $ver is too old, need $MIN_SHELL or newer." >&2; exit 1; }
-(( ver <= MAX_SHELL )) || { echo "GNOME Shell $ver is not supported yet (MY DOCK FINDER FOR LINUX supports $MIN_SHELL-$MAX_SHELL). See https://github.com/jay-p/MyDock-Linux/issues" >&2; exit 1; }
+(( ver <= MAX_SHELL )) || { echo "GNOME Shell $ver is not supported yet (MY DOCK FINDER FOR LINUX supports $MIN_SHELL-$MAX_SHELL). See https://github.com/Icyubahiro-Jay-P/MyDock-Linux/issues" >&2; exit 1; }
 
 # No payload after the marker = shipped standalone as dock by the .deb.
 if [[ -n "$(awk 'f{print;exit} /^__PAYLOAD__$/{f=1}' "$0")" ]]; then
@@ -86,4 +104,5 @@ echo
 echo "Done. Log out and back in to start MY DOCK FINDER FOR LINUX (Wayland cannot reload the shell)."
 echo "Settings: gnome-extensions prefs $UUID"
 exit 0
+# shellcheck disable=SC2317 # marker line, never executed: the base64 payload follows
 __PAYLOAD__
