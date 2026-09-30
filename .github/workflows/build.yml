@@ -21,7 +21,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends shellcheck libglib2.0-bin
       - run: node extension/deform-math.test.mjs && node extension/version.test.mjs
       - run: shellcheck install.sh install-stub.sh build.sh
-      - run: ./build.sh && (cd dist && sha256sum dock-install.sh ./*.deb > SHA256SUMS)
+      - run: bash build.sh && (cd dist && sha256sum dock-install.sh ./*.deb > SHA256SUMS)
       - uses: actions/upload-artifact@v4
         with:
           name: dist
