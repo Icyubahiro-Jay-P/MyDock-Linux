@@ -108,7 +108,7 @@
   background-gradient-start: rgba(52, 48, 45, 0.82);
   background-gradient-end: rgba(30, 28, 27, 0.86);
   border: 1px solid rgba(255, 255, 255, 0.24);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
   color: #ffffff;
   font-weight: bold;
 }
@@ -625,7 +625,7 @@
   background-gradient-start: rgba(70, 70, 72, 0.94);
   background-gradient-end: rgba(40, 40, 42, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.22);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
   color: #f2f2f7;
 }
 .mydock-about .modal-dialog-content-box {
