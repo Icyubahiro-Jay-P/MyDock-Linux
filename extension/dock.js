@@ -28,7 +28,7 @@ const REBUILD_KEYS = [
 ];
 
 const PILL_W = 500;          // hidden-dock pill
-const PILL_H = 20;
+const PILL_H = 15;
 const PILL_GAP = 4;          // between the pill and the screen edge
 const PILL_BLUR = 20;
 const BLUR_BANDS = 6;       // blur bands per rounded corner (see restyle)
