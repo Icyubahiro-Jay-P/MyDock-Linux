@@ -50,7 +50,7 @@ Watch the logs in another terminal:
 journalctl -f -o cat /usr/bin/gnome-shell
 ```
 
-The nested shell loads the installed copy in `~/.local/share/gnome-shell/extensions/mydock@jay-p`, so rebuild and reinstall before starting it. Open the settings window with `gnome-extensions prefs mydock@jay-p`.
+The nested shell loads the installed copy in `~/.local/share/gnome-shell/extensions/mydock@icyubahiro-jay-p`, so rebuild and reinstall before starting it. Open the settings window with `gnome-extensions prefs mydock@icyubahiro-jay-p`.
 
 ## Code layout
 
