@@ -33,7 +33,7 @@ const PAGES = [
     ], 'preview'],
     'MyFinder',
     ['Finder Bar', 'preferences-desktop-display-symbolic', 'grey', [
-        ['', ['finderbar-enabled', 'finderbar-blur']],
+        ['', ['finderbar-enabled', 'finderbar-blur', 'finderbar-stats']],
         ['Menu and clock', ['logo-path', 'time-format'],
             'The clock uses GLib strftime codes, for example %a %-d %b  %-I:%M %p.'],
     ]],
@@ -68,6 +68,7 @@ const TITLES = {
     'show-clock': 'Live clock',
     'finderbar-enabled': 'Show the Finder bar',
     'finderbar-blur': 'Translucent background',
+    'finderbar-stats': 'Show system stats (CPU, temperature, memory, disk, network)',
     'logo-path': 'Menu logo',
     'time-format': 'Clock format',
     'window-buttons-left': 'Buttons on the left (macOS order)',
@@ -99,6 +100,7 @@ const PATH_ROWS = {'logo-path': 'file', 'theme-path': 'folder'};
 const DEPENDS = {
     'max-size': 'magnify',
     'finderbar-blur': 'finderbar-enabled',
+    'finderbar-stats': 'finderbar-enabled',
     'traffic-lights': 'window-buttons-left',
     'stage-count': 'stage-manager',
     'stage-size': 'stage-manager',
@@ -314,7 +316,7 @@ export default class MyDockPrefs extends ExtensionPreferences {
 
 function sidebarRow(title, icon, color) {
     const box = new Gtk.Box({spacing: 10});
-    box.append(new Gtk.Image({icon_name: icon, pixel_size: 14, css_classes: ['mydock-badge', `mydock-${color}`]}));
+    box.append(new Gtk.Image({icon_name: icon, pixel_size: 14, valign: Gtk.Align.CENTER, halign: Gtk.Align.CENTER, css_classes: ['mydock-badge', `mydock-${color}`]}));
     box.append(new Gtk.Label({label: title, xalign: 0}));
     return new Gtk.ListBoxRow({child: box});
 }
