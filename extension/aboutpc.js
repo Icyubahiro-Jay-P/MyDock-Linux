@@ -49,9 +49,14 @@ export function showAboutPC(_ext) {
     dialog.buttonLayout.hide();
     const box = dialog.contentLayout;
 
-    const close = new St.Button({style_class: 'mydock-about-close', x_align: Clutter.ActorAlign.START});
+    // traffic lights: red closes, the other two are decoration like on a macOS About window
+    const lights = new St.BoxLayout({style_class: 'mydock-about-lights', x_align: Clutter.ActorAlign.START});
+    const close = new St.Button({style_class: 'mydock-about-close'});
     close.connect('clicked', () => dialog.close());
-    box.add_child(close);
+    lights.add_child(close);
+    lights.add_child(new St.Widget({style_class: 'mydock-about-light'}));
+    lights.add_child(new St.Widget({style_class: 'mydock-about-light'}));
+    box.add_child(lights);
 
     const laptop = LAPTOP_CHASSIS.includes(parseInt(readText(`${DMI}/chassis_type`)));
     box.add_child(new St.Icon({
