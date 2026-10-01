@@ -31,6 +31,7 @@
     <key name="finderbar-blur" type="b"><default>true</default><summary>Translucent blurred top bar</summary></key>
     <key name="time-format" type="s"><default>'%a %-d %b  %-I:%M %p'</default><summary>Top bar clock format (GLib strftime)</summary></key>
     <key name="logo-path" type="s"><default>''</default><summary>Custom logo image for the top-left menu (empty = distributor logo icon)</summary></key>
+    <key name="finderbar-status-menus" type="b"><default>true</default><summary>Show Wi-Fi, Bluetooth, sound, display, battery and account menus with a Control Center</summary></key>
     <key name="finderbar-stats" type="b"><default>true</default><summary>Show CPU, temperature, memory, disk and network in the top bar</summary></key>
     <key name="stats-cpu" type="b"><default>true</default><summary>Show CPU usage</summary></key>
     <key name="stats-temp" type="b"><default>true</default><summary>Show CPU temperature</summary></key>
