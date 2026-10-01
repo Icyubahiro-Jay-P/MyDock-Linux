@@ -119,6 +119,7 @@ Every setting applies live. Key settings (schema `org.gnome.shell.extensions.myd
 | Dock | `autohide` | `false` | Auto-hide the dock |
 | Dock | `multi-monitor` | `true` | Dock on every monitor |
 | Dock | `blur` / `opacity` | `15` / `45` | Background blur radius and opacity (%) |
+| Dock | `blur-windows` | `false` | Blur windows behind the Dock live (off: blurred wallpaper with clean corners, fastest) |
 | Dock | `show-trash`, `show-calendar`, `show-clock`, `show-launchpad` | on, on, off, on | Extra dock icons |
 | Finder bar | `finderbar-enabled` | `true` | macOS-style top bar |
 | Finder bar | `finderbar-status-menus` | `true` | Wi-Fi, Bluetooth, sound, display, battery, account menus and a Control Center in the Finder bar |
