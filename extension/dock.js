@@ -27,11 +27,10 @@ const REBUILD_KEYS = [
     'show-running-dots', 'theme-path',
 ];
 
-const PILL_W = 500;          // hidden-dock pill
+const PILL_W = 500;          // the auto-hidden dock shrinks into a pill this size
 const PILL_H = 15;
 const PILL_GAP = 4;          // between the pill and the screen edge
-const PILL_BLUR = 20;
-const BLUR_BANDS = 6;       // blur bands per rounded corner (see restyle)
+const BLUR_BANDS = 4;       // blur bands per rounded corner (see restyle)
 const HIDE_DELAY = 400; // ms before intellihide re-evaluates after pointer leaves
 const CALENDAR_ID = 'org.gnome.Calendar.desktop';
 const CLOCKS_ID = 'org.gnome.clocks.desktop';
@@ -547,11 +546,21 @@ class DockBar {
             layout_manager: new Clutter.BinLayout(),
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.START,
+            reactive: true,     // when auto-hidden the background is the pill: hovering it reveals the dock
+            track_hover: true,
         });
         this._tint = new St.Widget({style_class: 'mydock-bg', x_expand: true, y_expand: true});
         // the corner radius comes from the theme, which may resolve after the first layout
         this._bg.add_child(this._tint);
+        this._pillTint = new St.Widget({style_class: 'mydock-hidden-pill', x_expand: true, y_expand: true, opacity: 0});
+        this._bg.add_child(this._pillTint);
         this._blur = new RoundedBlur(this._bg, this._tint);
+        this._morph = 0;   // 0 = full dock, 1 = shrunk into the hidden pill (animated in _frame)
+        this._bg.connect('notify::hover', () => {
+            if (this._bg.hover && this.hidden)
+                this.setHidden(false);
+            this.dock.queueHideCheck();
+        });
         this._tint.connect('style-changed', () => this._layoutBlur());
         this.actor.add_child(this._bg);
 
@@ -615,7 +624,6 @@ class DockBar {
                 this.dock.queueHideCheck();
             });
             this.box.connect('notify::allocation', () => this._placeStrip());
-            this._buildPill();
         }
 
         this._buildSpecials();
@@ -623,7 +631,7 @@ class DockBar {
     }
 
     get hovered() {
-        return this.box.hover || !!this._strip?.hover || !!this._pill?.hover ||
+        return this.box.hover || this._bg.hover || !!this._strip?.hover ||
             [...this._items.values(), ...this._specials, ...this._seps.values()].some(i => i.menuOpen);
     }
 
@@ -651,7 +659,9 @@ class DockBar {
         if (s.get_boolean('show-clock')) {
             this._clock = makeClockIcon();
             this._secondsId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
-                this._clock.update();
+                // no repaint while hidden / fullscreen / locked
+                if (this._clock.mapped && !this.hidden)
+                    this._clock.update();
                 return GLib.SOURCE_CONTINUE;
             });
             this._specials.push(new DockItem(this, this._clock, {
@@ -713,7 +723,8 @@ class DockBar {
 
     restyle() {
         const s = this.dock.ext.settings;
-        this._tint.opacity = Math.round(s.get_int('opacity') * 2.55);
+        this._tintOpacity = Math.round(s.get_int('opacity') * 2.55);
+        this._tint.opacity = Math.round(this._tintOpacity * (1 - this._morph));
         const radius = s.get_int('blur');
         // blur effects set up before the dock is first painted leave square corner artifacts;
         // build them once it is on screen
@@ -808,8 +819,8 @@ class DockBar {
 
     // Stage rect of the unmagnified dock panel (used for intellihide / unpin).
     dockRect() {
-        const [x, y] = this.box.get_transformed_position();
-        return {x, y: y - this.actor.translation_y, width: this.box.width, height: this.box.height};
+        // untransformed: the hidden morph moves the actor, not where the dock lives
+        return {x: this.actor.x + this.box.x, y: this.actor.y + this.box.y, width: this.box.width, height: this.box.height};
     }
 
     _placeStrip() {
@@ -817,59 +828,6 @@ class DockBar {
         const x = this.actor.x + this.box.x;
         this._strip.set_position(Math.round(x), this.monitor.y + this.monitor.height - 1);
         this._strip.width = Math.max(1, Math.round(this.box.width));
-    }
-
-    // Hidden-dock hint: a whitish blurred pill at the bottom while the dock is auto-hidden.
-    // Hovering it brings the dock back.
-    _buildPill() {
-        const m = this.monitor;
-        const w = Math.min(PILL_W, Math.round(m.width * 0.6));
-        // trackFullscreen forces `visible` on the tracked actor, so track a wrapper
-        this._pillBox = new St.Widget({layout_manager: new Clutter.FixedLayout()});
-        this._pill = new St.Widget({
-            layout_manager: new Clutter.BinLayout(),
-            reactive: true,
-            track_hover: true,
-            width: w,
-            height: PILL_H,
-            opacity: 0,
-            visible: false,
-        });
-        this._pillTint = new St.Widget({style_class: 'mydock-hidden-pill', x_expand: true, y_expand: true});
-        this._pill.add_child(this._pillTint);
-        this._pillBlur = new RoundedBlur(this._pill, this._pillTint);
-        this._pillBox.add_child(this._pill);
-        this._pillBox.set_position(m.x + Math.round((m.width - w) / 2), m.y + m.height - PILL_H - PILL_GAP);
-        Main.layoutManager.addChrome(this._pillBox, {affectsStruts: false, trackFullscreen: true});
-        // blur set up before first paint leaves square corners (see restyle), so wait for the map
-        this._pill.connectObject('notify::mapped', () => {
-            if (!this._pill.mapped)
-                return;
-            this._pill.disconnectObject(this);
-            this._pillBlur.set(PILL_BLUR);
-            const node = this._pillTint.get_theme_node();
-            this._pillBlur.layout(w, PILL_H, node.get_border_radius(St.Corner.TOPLEFT));
-        }, this);
-        this._pill.connect('notify::hover', () => {
-            if (this._pill.hover)
-                this.setHidden(false);
-            this.dock.queueHideCheck();
-        });
-    }
-
-    _showPill(show) {
-        if (!this._pill)
-            return;
-        this._pill.remove_all_transitions();
-        if (show)
-            this._pill.show();
-        this._pill.ease({
-            opacity: show ? 255 : 0,
-            duration: 220,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-            // hidden, not just transparent, so it stops taking input over windows
-            onComplete: () => !show && this._pill.hide(),
-        });
     }
 
     setHidden(hidden) {
@@ -882,12 +840,9 @@ class DockBar {
             this._pointerX = null;
             this.hideLabel();
         }
-        this._showPill(hidden);
-        this.actor.ease({
-            translation_y: hidden ? this.geom.H + this.geom.E + 2 : 0,
-            duration: 220,
-            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-        });
+        if (!hidden)
+            this.box.show();
+        this._kick();   // _frame() morphs the dock into / out of the pill
     }
 
     onItemHover(item) {
@@ -1046,7 +1001,20 @@ class DockBar {
                 kid.applyScale(kid.scaleCur);
         }
         const grow = total + this._gapCur;
-        this._bg.set_size(Math.round(this.box.width + grow), this.box.height);
+
+        // auto-hide morph: background shrinks into the pill and drops to the screen edge,
+        // icons fade out with it; reversed on reveal
+        const m = this._morph = approach(this._morph, this.hidden ? 1 : 0);
+        const {H, E} = this.geom;
+        const pillW = Math.min(PILL_W, this.monitor.width * 0.6);
+        const fullW = this.box.width + grow;
+        this._bg.set_size(Math.round(fullW + (pillW - fullW) * m), Math.round(H + (PILL_H - H) * m));
+        this.actor.translation_y = Math.round((H + E - PILL_H - PILL_GAP) * m);
+        this.box.opacity = Math.round(255 * Math.max(0, 1 - 2 * m));
+        this._tint.opacity = Math.round(this._tintOpacity * (1 - m));
+        this._pillTint.opacity = Math.round(255 * m);
+        if (m === 1 && this.box.visible)
+            this.box.hide();   // invisible icons must not take clicks
         this._layoutBlur();
 
         if (this._label.visible)
@@ -1064,8 +1032,6 @@ class DockBar {
         this._trashIcon = null;
         this._label.destroy();
         this._strip?.destroy();
-        this._pillBox?.destroy();
-        this._pill = null;
         for (const item of [...this._items.values(), ...this._specials])
             item.destroy();
         this._items.clear();
