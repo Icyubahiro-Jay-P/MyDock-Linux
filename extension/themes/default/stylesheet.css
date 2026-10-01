@@ -565,12 +565,15 @@
     border: none;
     box-shadow: none;
 }
-.mydock-menu .datemenu-today-button .day-label {
-    font-weight: bold;
-}
+.mydock-menu .datemenu-today-button .day-label,
 .mydock-menu .datemenu-today-button .date-label {
-    font-size: 11pt;
+    font-size: 10.5pt;
     font-weight: bold;
+    color: #f5f5f7;
+}
+.mydock-light .mydock-menu .datemenu-today-button .day-label,
+.mydock-light .mydock-menu .datemenu-today-button .date-label {
+    color: #1d1d1f;
 }
 .mydock-menu .datemenu-today-button:hover,
 .mydock-menu .events-button:hover,
@@ -622,7 +625,7 @@
   background-gradient-start: rgba(70, 70, 72, 0.94);
   background-gradient-end: rgba(40, 40, 42, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.22);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   color: #f2f2f7;
 }
 .mydock-about .modal-dialog-content-box {
@@ -755,17 +758,17 @@
     padding-top: 5px;
     padding-bottom: 5px;
 }
-/* section headings ("Device", "Other networks", battery state) read a step dimmer */
+/* section headings ("Display", "Device", "Other networks") read a touch softer than rows */
 .mydock-status-heading,
 .mydock-status-heading.popup-inactive-menu-item {
-    font-size: 9pt;
+    font-size: 9.5pt;
     padding-top: 6px;
     padding-bottom: 2px;
-    color: rgba(245, 245, 247, 0.72);
+    color: rgba(245, 245, 247, 0.88);
 }
 .mydock-light .mydock-status-heading,
 .mydock-light .mydock-status-heading.popup-inactive-menu-item {
-    color: rgba(29, 29, 31, 0.65);
+    color: rgba(29, 29, 31, 0.8);
 }
 
 /* rows with a round icon chip; the chip turns blue when the row is the active one */
@@ -782,6 +785,7 @@
 }
 .mydock-chip-icon {
     icon-size: 14px;
+    -st-icon-style: symbolic; /* full-color device icons would clash with the chip */
 }
 .mydock-dark .mydock-chip { background-color: rgba(255, 255, 255, 0.14); color: #f5f5f7; }
 .mydock-light .mydock-chip { background-color: rgba(0, 0, 0, 0.08); color: #1d1d1f; }
