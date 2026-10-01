@@ -10,6 +10,7 @@ EXCL=(--exclude=gschemas.compiled --exclude='*.test.mjs')
 chmod +x dist/dock-install.sh
 
 VERSION=$(python3 -c 'import json; print(json.load(open("extension/metadata.json"))["version-name"])')
+[[ $VERSION =~ ^[0-9]+(\.[0-9]+)*$ ]] || { echo "Bad version-name in metadata.json: $VERSION" >&2; exit 1; }
 DEB="dist/dock_${VERSION}_all.deb"
 root=$(mktemp -d)
 trap 'rm -rf "$root"' EXIT
