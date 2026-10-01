@@ -174,6 +174,9 @@ class DockItem extends St.Button {
     }
 
     applyScale(s) {
+        if (s === this._applied)
+            return;     // settled icons: skip the per-frame set_scale
+        this._applied = s;
         const k = this._bar.geom.S / this._bar.geom.M * s;
         this._icon.set_scale(k, k);
     }
@@ -561,7 +564,10 @@ class DockBar {
                 this.setHidden(false);
             this.dock.queueHideCheck();
         });
-        this._tint.connect('style-changed', () => this._layoutBlur());
+        this._tint.connect('style-changed', () => {
+            this._radius = null;    // re-read the themed corner radius
+            this._layoutBlur();
+        });
         this.actor.add_child(this._bg);
 
         this.box = new St.BoxLayout({
@@ -740,10 +746,15 @@ class DockBar {
         this._layoutBlur();
     }
 
-    _layoutBlur() {
-        const [W, H] = this._bg.get_size();
-        const node = this._tint.get_theme_node?.();
-        this._blur.layout(W, H, node ? node.get_border_radius(St.Corner.TOPLEFT) : 18);
+    _layoutBlur(W, H) {
+        if (W === undefined)
+            [W, H] = this._bg.get_size();
+        // cached: _frame() calls this every frame the background resizes
+        if (this._radius == null) {
+            const node = this._tint.get_theme_node?.();
+            this._radius = node ? node.get_border_radius(St.Corner.TOPLEFT) : 18;
+        }
+        this._blur.layout(W, H, this._radius);
     }
 
     // Rebuild the children order: pinned (+ user separators), running, separator, specials.
@@ -996,7 +1007,11 @@ class DockBar {
         let acc = -total / 2;
         for (const kid of kids) {
             const extra = kid instanceof DockItem ? (kid.scaleCur - 1) * S : 0;
-            kid.translation_x = acc + extra / 2 + kid.shift;
+            const tx = acc + extra / 2 + kid.shift;
+            if (kid._tx !== tx) {
+                kid._tx = tx;
+                kid.translation_x = tx;
+            }
             acc += extra;
             if (kid instanceof DockItem)
                 kid.applyScale(kid.scaleCur);
@@ -1009,16 +1024,25 @@ class DockBar {
         const {H, E} = this.geom;
         const pillW = Math.min(PILL_W, this.monitor.width * 0.6);
         const fullW = this.box.width + grow;
-        this._bg.set_size(Math.round(fullW + (pillW - fullW) * m), Math.round(H + (PILL_H - H) * m));
-        // the BinLayout centers the background vertically in the (H + E) tall actor, so the pill's
-        // bottom edge lands PILL_GAP above the screen edge after this drop
-        this.actor.translation_y = Math.round(((H + E - PILL_H) / 2 - PILL_GAP) * m);
-        this.box.opacity = Math.round(255 * Math.max(0, 1 - 2 * m));
-        this._tint.opacity = Math.round(this._tintOpacity * (1 - m));
-        this._pillTint.opacity = Math.round(255 * m);
+        const bgW = Math.round(fullW + (pillW - fullW) * m), bgH = Math.round(H + (PILL_H - H) * m);
+        // only touch actors whose values changed (magnifying leaves m at 0 for many frames)
+        if (bgW !== this._bgW || bgH !== this._bgH) {
+            this._bgW = bgW;
+            this._bgH = bgH;
+            this._bg.set_size(bgW, bgH);
+            this._layoutBlur(bgW, bgH);
+        }
+        if (m !== this._lastM) {
+            this._lastM = m;
+            // the BinLayout centers the background vertically in the (H + E) tall actor, so the
+            // pill's bottom edge lands PILL_GAP above the screen edge after this drop
+            this.actor.translation_y = Math.round(((H + E - PILL_H) / 2 - PILL_GAP) * m);
+            this.box.opacity = Math.round(255 * Math.max(0, 1 - 2 * m));
+            this._tint.opacity = Math.round(this._tintOpacity * (1 - m));
+            this._pillTint.opacity = Math.round(255 * m);
+        }
         if (this.hidden && m === 1 && this.box.visible)
             this.box.hide();   // invisible icons must not take clicks
-        this._layoutBlur();
 
         if (this._label.visible)
             this._placeLabel();
