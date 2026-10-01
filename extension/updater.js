@@ -32,7 +32,7 @@ dl() { if command -v curl >/dev/null; then curl --proto '=https' --proto-redir '
 d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; cd "$d"
 dl "$base/$f" "$f" || { echo "Download failed: $base/$f"; exit 1; }
 dl "$base/SHA256SUMS" SHA256SUMS || { echo "Download failed: $base/SHA256SUMS"; exit 1; }
-grep -E "^[0-9a-f]{64} [ *]$f\$" SHA256SUMS | sha256sum -c - || { echo "Checksum check failed, nothing was installed."; exit 1; }
+grep -E "^[0-9a-f]{64} [ *](\\./)?$f\$" SHA256SUMS | sha256sum -c - || { echo "Checksum check failed, nothing was installed."; exit 1; }
 if [ "$mode" = deb ]; then pkexec apt-get install -y "$d/$f"; else bash "$f"; fi`;
 
 export class Updater {
