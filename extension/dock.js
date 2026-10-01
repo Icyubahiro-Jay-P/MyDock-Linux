@@ -20,6 +20,8 @@ import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {AppMenu} from 'resource:///org/gnome/shell/ui/appMenu.js';
 
+import {makeMonthCalendar} from './calendar.js';
+
 // Changing any of these rebuilds the bars; blur/opacity only restyle.
 const REBUILD_KEYS = [
     'icon-size', 'max-size', 'magnify', 'icon-space', 'edge-distance', 'autohide',
@@ -34,6 +36,11 @@ const BLUR_BANDS = 2;       // blur bands per rounded corner (see restyle)
 const HIDE_DELAY = 400; // ms before intellihide re-evaluates after pointer leaves
 const CALENDAR_ID = 'org.gnome.Calendar.desktop';
 const CLOCKS_ID = 'org.gnome.clocks.desktop';
+const LAUNCHER_ENTRY = 'com.canonical.Unity.LauncherEntry';
+
+function clockDate() {
+    return GLib.DateTime.new_now_local().format('%Y/%-m/%-d %A');
+}
 
 function appFromSource(source) {
     return source?.app instanceof Shell.App ? source.app : null;
@@ -130,11 +137,14 @@ class DockItem extends St.Button {
             y_align: Clutter.ActorAlign.CENTER,
             visible: false,
         });
-        const dotRow = new St.Bin({height: P, child: this._dot});
+        // dot and (lazily) the progress track share the row
+        this._dotRow = new St.Widget({height: P, layout_manager: new Clutter.BinLayout()});
+        this._dotRow.add_child(this._dot);
+        this._progress = null;
 
         const col = new St.BoxLayout({vertical: true});
         col.add_child(slot);
-        col.add_child(dotRow);
+        col.add_child(this._dotRow);
         this.set_child(col);
 
         this.connect('clicked', (_b, button) => this._clicked(button));
@@ -196,10 +206,37 @@ class DockItem extends St.Button {
         if (!this.app)
             return;
         const settings = this._bar.dock.ext.settings;
-        this._dot.visible = settings.get_boolean('show-running-dots') &&
+        const p = this._bar.dock.progressFor(this.app.get_id());
+        this._setProgress(p);
+        this._dot.visible = p === null && settings.get_boolean('show-running-dots') &&
             this.app.state !== Shell.AppState.STOPPED;
         if (this.app.state === Shell.AppState.STARTING && settings.get_boolean('bounce-on-launch'))
             this._bounce();
+    }
+
+    // p in 0..1, or null to hide the track
+    _setProgress(p) {
+        if (p === this._progress)
+            return;
+        this._progress = p;
+        if (p !== null && !this._track) {
+            this._trackW = Math.round(this._bar.geom.S * 0.8);
+            this._track = new St.Widget({
+                style_class: 'mydock-progress',
+                width: this._trackW,
+                height: 3,
+                x_align: Clutter.ActorAlign.CENTER,
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            this._fill = new St.Widget({style_class: 'mydock-progress-fill', height: 3});
+            this._track.add_child(this._fill);
+            this._dotRow.add_child(this._track);
+        }
+        if (!this._track)
+            return;
+        this._track.visible = p !== null;
+        if (p !== null)
+            this._fill.width = Math.round(this._trackW * Math.min(1, Math.max(0, p)));
     }
 
     _bounce() {
@@ -371,22 +408,24 @@ class DockSeparator extends St.Widget {
     }
 });
 
-// Live calendar icon: day of week + day number.
+// Live calendar icon: blue month header band + day number on white.
 function makeCalendarIcon(M) {
-    const w = new St.BoxLayout({style_class: 'mydock-calendar', vertical: true,
-        style: `border-radius: ${Math.round(M * 0.22)}px; padding-top: ${Math.round(M * 0.05)}px;`});
-    const dow = new St.Label({style_class: 'mydock-calendar-dow', x_align: Clutter.ActorAlign.CENTER,
-        style: `font-size: ${Math.round(M * 0.17)}px;`});
+    const r = Math.round(M * 0.22);
+    const w = new St.BoxLayout({style_class: 'mydock-calendar', vertical: true, style: `border-radius: ${r}px;`});
+    const month = new St.Label({style_class: 'mydock-calendar-month', x_align: Clutter.ActorAlign.CENTER,
+        y_align: Clutter.ActorAlign.CENTER, style: `font-size: ${Math.round(M * 0.17)}px;`});
+    const header = new St.Bin({style_class: 'mydock-calendar-header', x_expand: true, child: month,
+        style: `border-radius: ${r}px ${r}px 0 0; height: ${Math.round(M * 0.27)}px;`});
     const day = new St.Label({style_class: 'mydock-calendar-day', x_align: Clutter.ActorAlign.CENTER,
-        y_expand: true, y_align: Clutter.ActorAlign.CENTER, style: `font-size: ${Math.round(M * 0.48)}px;`});
-    w.add_child(dow);
+        y_expand: true, y_align: Clutter.ActorAlign.CENTER, style: `font-size: ${Math.round(M * 0.5)}px;`});
+    w.add_child(header);
     w.add_child(day);
     w.update = () => {
         const now = GLib.DateTime.new_now_local();
         const d = `${now.get_day_of_month()}`;
         if (d === day.text)
             return; // only relayout when the day changes
-        dow.text = now.format('%a').toUpperCase();
+        month.text = now.format('%b');
         day.text = d;
     };
     w.update();
@@ -606,8 +645,28 @@ class DockBar {
             this.dock.queueHideCheck();
         });
 
-        this._label = new St.Label({style_class: 'mydock-label', visible: false});
-        Main.uiGroup.add_child(this._label);
+        // hover label with a small down arrow under it, centered on the icon
+        this._label = new St.Label({style_class: 'mydock-label'});
+        const arrow = new St.DrawingArea({style_class: 'mydock-label-arrow', width: 12, height: 6,
+            x_align: Clutter.ActorAlign.CENTER});
+        arrow.connect('repaint', () => {
+            const cr = arrow.get_context();
+            const [w, h] = arrow.get_surface_size();
+            const c = arrow.get_theme_node().get_foreground_color();
+            cr.setSourceRGBA(c.red / 255, c.green / 255, c.blue / 255, c.alpha / 255);
+            cr.moveTo(0, 0);
+            cr.lineTo(w, 0);
+            cr.lineTo(w / 2, h);
+            cr.closePath();
+            cr.fill();
+            cr.$dispose();
+        });
+        this._tip = new St.BoxLayout({vertical: true, visible: false});
+        this._tip.add_child(this._label);
+        this._tip.add_child(arrow);
+        Main.uiGroup.add_child(this._tip);
+        this._month = null;     // month calendar popup, built on first calendar hover
+        this._shown = null;     // this._tip or this._month while one is up
 
         // on the always-mapped dock actor: the box is hidden while the dock is shrunk into the pill
         this._timeline = new Clutter.Timeline({actor: this.actor, duration: 1000, repeat_count: -1});
@@ -658,7 +717,7 @@ class DockBar {
         }
         if (s.get_boolean('show-calendar')) {
             this._calendar = makeCalendarIcon(M);
-            this._specials.push(new DockItem(this, this._calendar, {
+            this._specials.push(this._calendarItem = new DockItem(this, this._calendar, {
                 label: 'Calendar',
                 onClick: () => launchAppId(CALENDAR_ID),
             }));
@@ -671,8 +730,8 @@ class DockBar {
                     this._clock.update();
                 return GLib.SOURCE_CONTINUE;
             });
-            this._specials.push(new DockItem(this, this._clock, {
-                label: 'Clock',
+            this._specials.push(this._clockItem = new DockItem(this, this._clock, {
+                label: clockDate(),
                 onClick: () => launchAppId(CLOCKS_ID),
             }));
         }
@@ -682,6 +741,10 @@ class DockBar {
             this._wallClock.connect('notify::clock', () => {
                 this._calendar?.update();
                 this._clock?.update();
+                if (this._shown === this._month)
+                    this._month.refresh();
+                else if (this._shown && this._hoverItem === this._clockItem)
+                    this._label.text = this._clockItem.labelText = clockDate();
             });
         }
         if (s.get_boolean('show-trash')) {
@@ -822,7 +885,11 @@ class DockBar {
     }
 
     syncApp(app) {
-        this._items.get(app.get_id())?.sync();
+        this.syncId(app.get_id());
+    }
+
+    syncId(id) {
+        this._items.get(id)?.sync();
     }
 
     itemFor(app) {
@@ -858,31 +925,57 @@ class DockBar {
     }
 
     onItemHover(item) {
-        if (item.hover && this.dock.ext.settings.get_boolean('show-labels') && item.labelText && !item.menuOpen) {
-            this._hoverItem = item;
+        if (item.hover && !item.menuOpen && item === this._calendarItem) {
+            // the month calendar replaces this tile's label
+            if (!this._month) {
+                this._month = makeMonthCalendar();
+                Main.uiGroup.add_child(this._month);
+            }
+            this._month.refresh();
+            this._show(item, this._month);
+        } else if (item.hover && this.dock.ext.settings.get_boolean('show-labels') && item.labelText && !item.menuOpen) {
+            if (item === this._clockItem)
+                item.labelText = clockDate();
             this._label.text = item.labelText;
-            this._label.show();
-            this._placeLabel();
-            this._kick();
+            this._show(item, this._tip);
         } else if (this._hoverItem === item) {
             this.hideLabel();
         }
     }
 
+    _show(item, actor) {
+        if (this._shown && this._shown !== actor)
+            this._shown.hide();
+        this._hoverItem = item;
+        this._shown = actor;
+        actor.show();
+        this._placeLabel();
+        this._kick();
+    }
+
+    // hides the label and the month calendar
     hideLabel() {
         this._hoverItem = null;
-        this._label.hide();
+        this._shown?.hide();
+        this._shown = null;
     }
 
     _placeLabel() {
         const icon = this._hoverItem?.icon;
-        if (!icon)
+        const a = this._shown;
+        if (!icon || !a)
             return;
         const [x, y] = icon.get_transformed_position();
         const [w] = icon.get_transformed_size();
-        this._label.set_position(
-            Math.round(x + w / 2 - this._label.width / 2),
-            Math.round(y - this._label.height - 8));
+        let ax = Math.round(x + w / 2 - a.width / 2);
+        // the tip arrow ends 2px above the icon; the popup keeps a gap and stays on the monitor
+        let ay = Math.round(y - a.height - 2);
+        if (a === this._month) {
+            const mon = this.monitor;
+            ax = Math.max(mon.x + 8, Math.min(ax, mon.x + mon.width - a.width - 8));
+            ay -= 8;
+        }
+        a.set_position(ax, ay);
     }
 
     // DND target interface (box._delegate = this)
@@ -1044,7 +1137,7 @@ class DockBar {
         if (this.hidden && m === 1 && this.box.visible)
             this.box.hide();   // invisible icons must not take clicks
 
-        if (this._label.visible)
+        if (this._shown)
             this._placeLabel();
         return settled;
     }
@@ -1057,7 +1150,9 @@ class DockBar {
         this._wallClock = null;
         this._trashMonitor?.cancel();
         this._trashIcon = null;
-        this._label.destroy();
+        this._tip.destroy();
+        this._month?.destroy();
+        this._month = this._shown = this._hoverItem = null;
         this._strip?.destroy();
         for (const item of [...this._items.values(), ...this._specials])
             item.destroy();
@@ -1114,6 +1209,11 @@ export class Dock {
         };
         DND.addDragMonitor(this._dragMonitor);
 
+        // Unity launcher API progress bars: one subscription for all bars
+        this._progress = new Map(); // app id -> {progress, visible}
+        this._progressSub = Gio.DBus.session.signal_subscribe(null, LAUNCHER_ENTRY, 'Update', null, null,
+            Gio.DBusSignalFlags.NONE, (_c, _s, _p, _i, _sig, params) => this._onLauncherEntry(params));
+
         this._rebuild();
         this._trackFocus();
     }
@@ -1133,7 +1233,33 @@ export class Dock {
         this.queueHideCheck(0);
     }
 
+    _onLauncherEntry(params) {
+        const [uri, props] = params.recursiveUnpack();
+        let id = uri.replace(/^application:\/\//, '');
+        if (!id.endsWith('.desktop'))
+            id += '.desktop';
+        // only running apps: their state is dropped again when they stop
+        if ((this._appSystem.lookup_app(id)?.state ?? Shell.AppState.STOPPED) === Shell.AppState.STOPPED)
+            return;
+        const state = this._progress.get(id) ?? {progress: 0, visible: false};
+        if (typeof props.progress === 'number')
+            state.progress = props.progress;
+        if (typeof props['progress-visible'] === 'boolean')
+            state.visible = props['progress-visible'];
+        this._progress.set(id, state);
+        for (const b of this._bars)
+            b.syncId(id);
+    }
+
+    // progress (0..1) to show under the app's icon, or null
+    progressFor(id) {
+        const st = this._progress.get(id);
+        return st?.visible ? st.progress : null;
+    }
+
     _onAppState(app) {
+        if (app.state === Shell.AppState.STOPPED)
+            this._progress.delete(app.get_id());
         const known = this._bars[0]?.itemFor(app);
         const shouldShow = app.state !== Shell.AppState.STOPPED || this._favs.isFavorite(app.get_id());
         if (!known !== !shouldShow)
@@ -1300,6 +1426,8 @@ export class Dock {
 
     destroy() {
         DND.removeDragMonitor(this._dragMonitor);
+        Gio.DBus.session.signal_unsubscribe(this._progressSub);
+        this._progress.clear();
         for (const obj of [this._favs, this._appSystem, Main.layoutManager, global.display,
             global.workspace_manager, Main.overview, this.ext.settings, this._focusWin])
             obj?.disconnectObject(this);
