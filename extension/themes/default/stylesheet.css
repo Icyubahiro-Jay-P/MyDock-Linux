@@ -65,8 +65,7 @@
   border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
-/* Live calendar icon: blue month band over a white body (sizes and radii are inline).
-   Replaces the old .mydock-calendar / .mydock-calendar-dow / .mydock-calendar-day rules. */
+/* Live calendar icon: blue month band over a white body (sizes and radii are inline). */
 .mydock-calendar {
   background-color: #ffffff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
@@ -337,9 +336,7 @@
     color: rgba(0, 0, 0, 0.85);
 }
 
-/* ---- finderbar (Agent A) ---- */
-/* Bold bar text. Same selectors as the existing `font-weight: normal` rules in the finderbar
-   section, so either replace those or keep this block after them. */
+/* ---- finderbar: bold text ---- */
 #panel.mydock-finderbar,
 #panel.mydock-finderbar:overview,
 #panel.mydock-finderbar .panel-button,
