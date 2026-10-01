@@ -33,7 +33,7 @@ const PAGES = [
     ], 'preview'],
     'MyFinder',
     ['Finder Bar', 'preferences-desktop-display-symbolic', 'grey', [
-        ['', ['finderbar-enabled', 'finderbar-blur']],
+        ['', ['finderbar-enabled', 'finderbar-blur', 'finderbar-status-menus']],
         ['System stats', ['finderbar-stats', 'stats-cpu', 'stats-temp', 'stats-mem', 'stats-disk', 'stats-net'],
             'Pick which meters appear in the top bar.'],
         ['Menu and clock', ['logo-path', 'time-format'],
@@ -70,6 +70,7 @@ const TITLES = {
     'show-clock': 'Live clock',
     'finderbar-enabled': 'Show the Finder bar',
     'finderbar-blur': 'Translucent background',
+    'finderbar-status-menus': 'Status menus and Control Center',
     'finderbar-stats': 'Show system stats',
     'stats-cpu': 'CPU usage',
     'stats-temp': 'CPU temperature',
@@ -107,6 +108,7 @@ const PATH_ROWS = {'logo-path': 'file', 'theme-path': 'folder'};
 const DEPENDS = {
     'max-size': 'magnify',
     'finderbar-blur': 'finderbar-enabled',
+    'finderbar-status-menus': 'finderbar-enabled',
     'finderbar-stats': 'finderbar-enabled',
     'stats-cpu': 'finderbar-stats',
     'stats-temp': 'finderbar-stats',
