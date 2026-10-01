@@ -172,7 +172,8 @@ export function attachTempPopup(menu, tempFile) {
     item.add_child(card);
     menu.addMenuItem(item);
 
-    let prev = null, timerId = 0, alive = true;
+    // seeded now so the first open already has a delta to draw a bar from
+    let prev = parseCpuStat(readText('/proc/stat')), timerId = 0, alive = true;
     const sample = () => {
         const cur = parseCpuStat(readText('/proc/stat'));
         if (cur && prev) {
