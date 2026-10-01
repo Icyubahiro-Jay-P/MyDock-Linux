@@ -603,7 +603,8 @@ class DockBar {
         this._label = new St.Label({style_class: 'mydock-label', visible: false});
         Main.uiGroup.add_child(this._label);
 
-        this._timeline = new Clutter.Timeline({actor: this.box, duration: 1000, repeat_count: -1});
+        // on the always-mapped dock actor: the box is hidden while the dock is shrunk into the pill
+        this._timeline = new Clutter.Timeline({actor: this.actor, duration: 1000, repeat_count: -1});
         this._timeline.connect('new-frame', () => {
             if (this._frame())
                 this._timeline.stop();
@@ -1013,7 +1014,7 @@ class DockBar {
         this.box.opacity = Math.round(255 * Math.max(0, 1 - 2 * m));
         this._tint.opacity = Math.round(this._tintOpacity * (1 - m));
         this._pillTint.opacity = Math.round(255 * m);
-        if (m === 1 && this.box.visible)
+        if (this.hidden && m === 1 && this.box.visible)
             this.box.hide();   // invisible icons must not take clicks
         this._layoutBlur();
 
@@ -1143,7 +1144,8 @@ export class Dock {
         const w = win ?? app.get_windows()[0];
         const bar = this._barFor(w ? w.get_monitor() : Main.layoutManager.primaryIndex);
         const item = bar?.itemFor(app);
-        if (!item || !item.mapped)
+        // the auto-hidden dock hides its box; the icon still has a valid (last) allocation
+        if (!item || !item.get_stage())
             return null;
         const [x, y] = item.get_transformed_position();
         const {S} = bar.geom;
