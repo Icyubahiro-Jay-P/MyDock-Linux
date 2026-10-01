@@ -386,17 +386,23 @@ export class FinderBar {
         const total = kb('MemTotal');
         this._stat.mem.text = total ? `${Math.round(100 * (total - kb('MemAvailable')) / total)}%` : '';
 
-        // disk usage changes slowly: every 15th tick (~30 s)
+        // disk usage changes slowly: every 15th tick (~30 s); async so a slow statfs never
+        // stalls the compositor
         if (this._statTick++ % 15 === 0) {
-            try {
-                const info = Gio.File.new_for_path('/').query_filesystem_info('filesystem::size,filesystem::free', null);
-                const size = info.get_attribute_uint64('filesystem::size');
-                const free = info.get_attribute_uint64('filesystem::free');
-                this._stat.disk.text = size ? `${Math.round(100 * (size - free) / size)}%` : '';
-            } catch {
-                this._statOk.disk = false;
-                this._syncStatCells();
-            }
+            Gio.File.new_for_path('/').query_filesystem_info_async('filesystem::size,filesystem::free',
+                GLib.PRIORITY_LOW, null, (f, res) => {
+                    if (!this._stat)
+                        return; // stats turned off / destroyed meanwhile
+                    try {
+                        const info = f.query_filesystem_info_finish(res);
+                        const size = info.get_attribute_uint64('filesystem::size');
+                        const free = info.get_attribute_uint64('filesystem::free');
+                        this._stat.disk.text = size ? `${Math.round(100 * (size - free) / size)}%` : '';
+                    } catch {
+                        this._statOk.disk = false;
+                        this._syncStatCells();
+                    }
+                });
         }
 
         const net = readNet();
