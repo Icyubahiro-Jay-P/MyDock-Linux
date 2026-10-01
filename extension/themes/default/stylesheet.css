@@ -9,8 +9,8 @@
   border: 1px solid rgba(255, 255, 255, 0.6);
 }
 .mydock-dark .mydock-bg {
-  background-color: rgb(40, 40, 44);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background-color: rgb(20, 20, 22);
+  border: 1px solid rgba(255, 255, 255, 0.22);
 }
 
 /* hidden-dock pill: shown at the bottom while the dock is auto-hidden, hover reveals the dock */
@@ -65,19 +65,71 @@
   border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
-/* Live calendar icon (font sizes are set inline relative to icon size) */
+/* Live calendar icon: blue month band over a white body (sizes and radii are inline).
+   Replaces the old .mydock-calendar / .mydock-calendar-dow / .mydock-calendar-day rules. */
 .mydock-calendar {
   background-color: #ffffff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
-.mydock-calendar-dow {
-  color: #ff3b30;
+.mydock-calendar-header {
+  background-gradient-direction: vertical;
+  background-gradient-start: #3a8ef0;
+  background-gradient-end: #1f6fd8;
+}
+.mydock-calendar-month {
+  color: #ffffff;
   font-weight: bold;
 }
 .mydock-calendar-day {
   color: #1c1c1e;
   font-weight: 300;
 }
+
+/* down arrow under the hover label: `color` is the fill, matching the label background */
+.mydock-label-arrow { color: rgba(240, 240, 242, 0.95); }
+.mydock-dark .mydock-label-arrow { color: rgba(44, 44, 48, 0.95); }
+
+/* month calendar popup above the calendar tile (calendar.js) */
+.mydock-month {
+  padding: 14px 16px 16px 16px;
+  spacing: 12px;
+  border-radius: 14px;
+  background-color: rgba(30, 30, 32, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  font-weight: bold;
+}
+.mydock-month-header {
+  font-size: 11pt;
+  padding-left: 4px;
+}
+.mydock-month-cell {
+  width: 30px;
+  height: 30px;
+  border-radius: 15px;
+  font-size: 10pt;
+}
+.mydock-month-weekday { font-size: 9.5pt; }
+.mydock-month-today { background-color: rgba(255, 255, 255, 0.35); }
+
+.mydock-light .mydock-month {
+  background-color: rgba(246, 246, 248, 0.92);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  color: #1c1c1e;
+}
+.mydock-light .mydock-month-today { background-color: rgba(0, 0, 0, 0.15); }
+
+/* download / task progress in the dot row (Unity LauncherEntry) */
+.mydock-progress {
+  border-radius: 2px;
+  background-color: rgba(0, 0, 0, 0.2);
+}
+.mydock-progress-fill {
+  border-radius: 2px;
+  background-color: rgba(0, 0, 0, 0.75);
+}
+.mydock-dark .mydock-progress { background-color: rgba(255, 255, 255, 0.25); }
+.mydock-dark .mydock-progress-fill { background-color: rgba(255, 255, 255, 0.9); }
 
 /* ---- Launchpad (our own full-screen launcher, launchpad.js) ---- */
 .mydock-launchpad-search {
@@ -138,7 +190,6 @@
 
 #panel.mydock-finderbar,
 #panel.mydock-finderbar:overview {
-    font-weight: normal;
     transition-duration: 250ms;
 }
 
@@ -175,7 +226,6 @@
 }
 
 #panel.mydock-finderbar .panel-button {
-    font-weight: normal;
     border-radius: 9px;
     transition-duration: 150ms;
 }
@@ -207,7 +257,6 @@
 
 /* clock */
 #panel.mydock-finderbar .mydock-clock {
-    font-weight: normal;
     font-feature-settings: "tnum";
 }
 
@@ -286,4 +335,278 @@
 }
 .mydock-light .mydock-stage-title {
     color: rgba(0, 0, 0, 0.85);
+}
+
+/* ---- finderbar (Agent A) ---- */
+/* Bold bar text. Same selectors as the existing `font-weight: normal` rules in the finderbar
+   section, so either replace those or keep this block after them. */
+#panel.mydock-finderbar,
+#panel.mydock-finderbar:overview,
+#panel.mydock-finderbar .panel-button,
+#panel.mydock-finderbar .mydock-clock,
+#panel.mydock-finderbar .mydock-stat-value {
+    font-weight: bold;
+}
+
+/* File / View / Window labels after the app name */
+#panel.mydock-finderbar .mydock-appmenu-button {
+    -natural-hpadding: 9px;
+    -minimum-hpadding: 4px;
+}
+
+/* ---- finder menus: .mydock-menu sits on every finder menu actor plus GNOME's dateMenu and
+   quickSettings menus. Dark by default, light under .mydock-light (on Main.uiGroup). ---- */
+.mydock-menu .popup-menu-content {
+    padding: 5px 0;
+    border-radius: 8px;
+    font-weight: bold;
+    color: #f5f5f7;
+    background-color: rgba(30, 30, 32, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.mydock-menu .popup-menu-item {
+    margin: 0 5px;
+    padding: 4px 10px;
+    border-radius: 5px;
+    spacing: 6px;
+    font-weight: bold;
+    color: #f5f5f7;
+}
+.mydock-menu .popup-menu-item:hover,
+.mydock-menu .popup-menu-item:focus,
+.mydock-menu .popup-menu-item:active,
+.mydock-menu .popup-menu-item:checked:hover,
+.mydock-menu .popup-menu-item:checked:focus {
+    color: #ffffff;
+    background-color: #1c5bd0;
+}
+.mydock-menu .popup-menu-item:insensitive {
+    color: rgba(245, 245, 247, 0.4);
+}
+.mydock-menu .popup-menu-item:hover .popup-menu-icon,
+.mydock-menu .popup-menu-item:focus .popup-menu-icon,
+.mydock-menu .popup-menu-item:hover .popup-menu-ornament,
+.mydock-menu .popup-menu-item:focus .popup-menu-ornament {
+    color: #ffffff;
+}
+.mydock-menu .popup-sub-menu {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 5px;
+    margin: 0 5px;
+}
+.mydock-menu .popup-separator-menu-item {
+    padding: 3px 0;
+    margin: 0 12px;
+}
+.mydock-menu .popup-separator-menu-item-separator {
+    height: 1px;
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+.mydock-light .mydock-menu .popup-menu-content {
+    color: #1d1d1f;
+    background-color: rgba(246, 246, 248, 0.96);
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+}
+.mydock-light .mydock-menu .popup-menu-item {
+    color: #1d1d1f;
+}
+.mydock-light .mydock-menu .popup-menu-item:hover,
+.mydock-light .mydock-menu .popup-menu-item:focus,
+.mydock-light .mydock-menu .popup-menu-item:active,
+.mydock-light .mydock-menu .popup-menu-item:checked:hover,
+.mydock-light .mydock-menu .popup-menu-item:checked:focus {
+    color: #ffffff;
+    background-color: #1c5bd0;
+}
+.mydock-light .mydock-menu .popup-menu-item:insensitive {
+    color: rgba(29, 29, 31, 0.4);
+}
+.mydock-light .mydock-menu .popup-sub-menu {
+    background-color: rgba(0, 0, 0, 0.04);
+}
+.mydock-light .mydock-menu .popup-separator-menu-item-separator {
+    background-color: rgba(0, 0, 0, 0.15);
+}
+
+/* ---- clock popup (GNOME dateMenu): compact month calendar, grey circle on today ---- */
+.mydock-menu .calendar {
+    margin: 0;
+    padding: 4px;
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+}
+.mydock-menu .calendar-month-label {
+    font-weight: bold;
+}
+.mydock-menu .calendar-day-heading {
+    font-size: 8.5pt;
+    font-weight: bold;
+    color: rgba(245, 245, 247, 0.7);
+}
+.mydock-menu .calendar-day {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border-radius: 15px;
+    font-size: 9.5pt;
+    font-weight: bold;
+    color: #f5f5f7;
+    background-color: transparent;
+}
+.mydock-menu .calendar-day:hover,
+.mydock-menu .calendar-day:focus {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+.mydock-menu .calendar-other-month {
+    color: rgba(245, 245, 247, 0.3);
+}
+.mydock-menu .calendar-today,
+.mydock-menu .calendar-today:hover,
+.mydock-menu .calendar-today:focus,
+.mydock-menu .calendar-today:selected {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.35);
+}
+.mydock-menu .datemenu-today-button,
+.mydock-menu .events-button,
+.mydock-menu .world-clocks-button,
+.mydock-menu .weather-button {
+    border-radius: 6px;
+    background-color: transparent;
+}
+.mydock-menu .datemenu-today-button:hover,
+.mydock-menu .events-button:hover,
+.mydock-menu .world-clocks-button:hover,
+.mydock-menu .weather-button:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.mydock-light .mydock-menu .calendar-day-heading {
+    color: rgba(29, 29, 31, 0.7);
+}
+.mydock-light .mydock-menu .calendar-day {
+    color: #1d1d1f;
+}
+.mydock-light .mydock-menu .calendar-day:hover,
+.mydock-light .mydock-menu .calendar-day:focus {
+    background-color: rgba(0, 0, 0, 0.08);
+}
+.mydock-light .mydock-menu .calendar-other-month {
+    color: rgba(29, 29, 31, 0.3);
+}
+.mydock-light .mydock-menu .calendar-today,
+.mydock-light .mydock-menu .calendar-today:hover,
+.mydock-light .mydock-menu .calendar-today:focus,
+.mydock-light .mydock-menu .calendar-today:selected {
+    color: #1d1d1f;
+    background-color: rgba(0, 0, 0, 0.18);
+}
+.mydock-light .mydock-menu .datemenu-today-button:hover,
+.mydock-light .mydock-menu .events-button:hover,
+.mydock-light .mydock-menu .world-clocks-button:hover,
+.mydock-light .mydock-menu .weather-button:hover {
+    background-color: rgba(0, 0, 0, 0.06);
+}
+
+/* ---- About This PC (aboutpc.js). Dark in both themes, like macOS. ---- */
+.modal-dialog.mydock-about {
+  width: 300px;
+  padding: 0;
+  border-radius: 12px;
+  background-color: rgba(44, 44, 46, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  color: #f2f2f7;
+}
+.mydock-about .modal-dialog-content-box {
+  margin: 0;
+  padding: 10px 20px 18px 20px;
+  spacing: 4px;
+}
+.mydock-about-close {
+  width: 12px;
+  height: 12px;
+  border-radius: 6px;
+  background-color: #ff5f57;
+  margin-bottom: 8px;
+}
+.mydock-about-close:hover { background-color: #ff3b30; }
+.mydock-about-icon {
+  color: #d1d1d6;
+  margin-bottom: 14px;
+}
+.mydock-about-host {
+  font-weight: bold;
+  font-size: 11pt;
+}
+.mydock-about-model {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 8.5pt;
+  margin-bottom: 14px;
+}
+.mydock-about-row {
+  spacing: 10px;
+  padding: 2px 0;
+}
+.mydock-about-key {
+  width: 80px;
+  text-align: right;
+  font-weight: bold;
+  font-size: 9pt;
+}
+.mydock-about-value {
+  width: 160px;
+  text-align: left;
+  font-size: 9pt;
+  color: rgba(255, 255, 255, 0.85);
+}
+.mydock-about-more {
+  margin-top: 14px;
+  padding: 3px 20px;
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 9pt;
+  color: #f2f2f7;
+  background-color: rgba(255, 255, 255, 0.2);
+}
+.mydock-about-more:hover,
+.mydock-about-more:focus { background-color: rgba(255, 255, 255, 0.3); }
+.mydock-about-more:active { background-color: rgba(255, 255, 255, 0.4); }
+
+/* ---- CPU temperature popup card (attachTempPopup) ---- */
+.mydock-temp-item,
+.mydock-temp-item:hover {
+  padding: 6px 8px;
+  background-color: transparent;
+}
+.mydock-temp-card {
+  min-width: 240px;
+  padding: 6px 12px 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background-color: rgba(255, 255, 255, 0.04);
+  spacing: 6px;
+}
+.mydock-light .mydock-temp-card {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background-color: rgba(0, 0, 0, 0.03);
+}
+.mydock-temp-title {
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: bold;
+  font-size: 9pt;
+}
+.mydock-light .mydock-temp-title { color: rgba(0, 0, 0, 0.5); }
+.mydock-temp-chart {
+  height: 60px;
+  margin: 4px 0;
+}
+.mydock-temp-rows { spacing: 2px; }
+.mydock-temp-row {
+  font-weight: bold;
+  font-size: 9pt;
 }
