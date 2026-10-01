@@ -25,11 +25,13 @@
     <key name="show-trash" type="b"><default>true</default><summary>Trash icon in dock</summary></key>
     <key name="show-calendar" type="b"><default>true</default><summary>Live calendar icon in dock</summary></key>
     <key name="show-clock" type="b"><default>false</default><summary>Live clock icon in dock</summary></key>
+    <key name="dock-separators" type="as"><default>[]</default><summary>App ids after which a user separator sits in the dock</summary></key>
     <!-- Finder bar -->
     <key name="finderbar-enabled" type="b"><default>true</default><summary>macOS-style top bar</summary></key>
     <key name="finderbar-blur" type="b"><default>true</default><summary>Translucent blurred top bar</summary></key>
     <key name="time-format" type="s"><default>'%a %-d %b  %-I:%M %p'</default><summary>Top bar clock format (GLib strftime)</summary></key>
     <key name="logo-path" type="s"><default>''</default><summary>Custom logo image for the top-left menu (empty = distributor logo icon)</summary></key>
+    <key name="finderbar-order" type="as"><default>[]</default><summary>Top bar item order as box:role entries (internal)</summary></key>
     <!-- Windows -->
     <key name="window-buttons-left" type="b"><default>true</default><summary>Window buttons on the left, macOS order (close, minimize, maximize)</summary></key>
     <key name="traffic-lights" type="b"><default>false</default><summary>Red, yellow and green window buttons in GTK apps (writes a marked block to ~/.config/gtk-3.0 and gtk-4.0 gtk.css)</summary></key>
