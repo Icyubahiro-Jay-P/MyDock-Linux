@@ -9,13 +9,29 @@ import Gtk from 'gi://Gtk';
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 // [page title, icon, badge color, [[group title, [key, ...], footnote?], ...], header?]
+// A plain string starts a new titled section in the sidebar.
 const PAGES = [
+    ['General', 'preferences-system-symbolic', 'grey', [
+        ['Theme', ['theme-path'],
+            'A theme folder holds a stylesheet.css and an icons/ folder. Leave it empty for the built-in look.'],
+    ], 'appearance'],
+    ['Stage Manager', 'view-dual-symbolic', 'blue', [
+        ['', ['stage-manager'],
+            'Stage Manager keeps the current window in the center and arranges your other windows in a strip on the left.'],
+        ['Strip', ['stage-count', 'stage-size', 'stage-show-title']],
+    ]],
+    ['Effects', 'applications-graphics-symbolic', 'red', [
+        ['Minimize', ['minimize-effect', 'minimize-duration']],
+        ['Launchpad', ['launchpad-hotkey'], 'Click the shortcut to record a new one.'],
+    ]],
+    'MyDock',
     ['Dock', 'view-app-grid-symbolic', 'blue', [
         ['', ['dock-enabled', 'autohide', 'multi-monitor', 'edge-distance']],
         ['Icons', ['icon-size', 'magnify', 'max-size', 'icon-space', 'bounce-on-launch', 'show-labels', 'show-running-dots']],
         ['Background', ['blur', 'opacity']],
         ['Extra icons', ['show-launchpad', 'show-trash', 'show-calendar', 'show-clock']],
     ], 'preview'],
+    'MyFinder',
     ['Finder Bar', 'preferences-desktop-display-symbolic', 'grey', [
         ['', ['finderbar-enabled', 'finderbar-blur']],
         ['Menu and clock', ['logo-path', 'time-format'],
@@ -25,19 +41,7 @@ const PAGES = [
         ['Title bar buttons', ['window-buttons-left', 'traffic-lights'],
             'Puts close, minimize and maximize on the left like macOS. Traffic light colors apply to GTK apps you open next; restart open apps to see them.'],
     ]],
-    ['Stage Manager', 'view-dual-symbolic', 'purple', [
-        ['', ['stage-manager'],
-            'Stage Manager keeps the current window in the center and arranges your other windows in a strip on the left.'],
-        ['Strip', ['stage-count', 'stage-size', 'stage-show-title']],
-    ]],
-    ['Effects', 'applications-graphics-symbolic', 'orange', [
-        ['Minimize', ['minimize-effect', 'minimize-duration']],
-        ['Launchpad', ['launchpad-hotkey'], 'Click the shortcut to record a new one.'],
-    ]],
-    ['Themes', 'preferences-color-symbolic', 'pink', [
-        ['', ['dark-mode', 'theme-path'],
-            'A theme folder holds a stylesheet.css and an icons/ folder. Leave it empty for the built-in look.'],
-    ]],
+    'Updates',
     ['About', 'software-update-available-symbolic', 'green', [
         ['Software Update', ['check-updates'], 'MY DOCK FINDER FOR LINUX checks GitHub once a day and offers a one-click update.'],
     ], 'about'],
@@ -75,7 +79,6 @@ const TITLES = {
     'minimize-effect': 'Minimize windows using',
     'minimize-duration': 'Animation length',
     'launchpad-hotkey': 'Open Launchpad',
-    'dark-mode': 'Appearance',
     'theme-path': 'Theme folder',
     'check-updates': 'Check for updates automatically',
 };
@@ -83,9 +86,8 @@ const TITLES = {
 const ENUM_ROWS = {
     'minimize-effect': ['none', 'scale', 'genie', 'suck'],
 };
-const INT_CHOICE_ROWS = {
-    'dark-mode': ['Follow system', 'Light', 'Dark'],
-};
+// dark-mode values shown as thumbnail cards on the General page
+const APPEARANCES = [['Light', 1, 'light'], ['Dark', 2, 'dark'], ['Follow OS', 0, 'auto']];
 // Int keys shown as a slider with this unit (other int keys get a spin button).
 const SLIDER_UNITS = {
     'icon-size': 'px', 'max-size': 'px', 'icon-space': 'px', 'edge-distance': 'px',
@@ -114,7 +116,8 @@ export default class MyDockPrefs extends ExtensionPreferences {
         const css = new Gtk.CssProvider();
         css.load_from_path(`${this.path}/prefs.css`);
         const display = Gdk.Display.get_default();
-        Gtk.StyleContext.add_provider_for_display(display, css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION);
+        // above USER: a full theme in ~/.config/gtk-4.0/gtk.css would otherwise restyle our buttons
+        Gtk.StyleContext.add_provider_for_display(display, css, Gtk.STYLE_PROVIDER_PRIORITY_USER + 1);
         window.connect('close-request', () => {
             Gtk.StyleContext.remove_provider_for_display(display, css);
             return false;
@@ -128,17 +131,20 @@ export default class MyDockPrefs extends ExtensionPreferences {
         sidebarBox.append(new Gtk.ScrolledWindow({
             child: list, vexpand: true, hscrollbar_policy: Gtk.PolicyType.NEVER,
         }));
+        // our own traffic lights replace the theme's title buttons
+        const sidebarHeader = new Adw.HeaderBar({show_title: false, show_start_title_buttons: false, show_end_title_buttons: false});
+        sidebarHeader.pack_start(windowDots(window));
         const sidebarView = new Adw.ToolbarView({content: sidebarBox});
-        sidebarView.add_top_bar(new Adw.HeaderBar({show_title: false}));
+        sidebarView.add_top_bar(sidebarHeader);
 
         // Content
         const stack = new Gtk.Stack();
         const titleLabel = new Gtk.Label({css_classes: ['mydock-page-title']});
-        const header = new Adw.HeaderBar({title_widget: new Gtk.Box()});
+        const header = new Adw.HeaderBar({title_widget: new Gtk.Box(), show_start_title_buttons: false, show_end_title_buttons: false});
         header.pack_start(titleLabel);
         const contentView = new Adw.ToolbarView({content: stack});
         contentView.add_top_bar(header);
-        const contentPage = new Adw.NavigationPage({child: contentView, title: PAGES[0][0]});
+        const contentPage = new Adw.NavigationPage({child: contentView, title: 'General'});
 
         const split = new Adw.NavigationSplitView({
             sidebar: new Adw.NavigationPage({child: sidebarView, title: 'MY DOCK FINDER FOR LINUX'}),
@@ -149,9 +155,25 @@ export default class MyDockPrefs extends ExtensionPreferences {
         });
 
         // Build every page and remember rows for search.
-        const pages = PAGES.map(([title, icon, color, groups, extra]) => {
+        const pages = [];
+        const headers = []; // {row, pages}
+        for (const def of PAGES) {
+            if (typeof def === 'string') {
+                const row = new Gtk.ListBoxRow({selectable: false, activatable: false, css_classes: ['mydock-sidebar-header-row'],
+                    child: new Gtk.Label({label: def, xalign: 0, css_classes: ['mydock-sidebar-header']})});
+                list.append(row);
+                headers.push({row, pages: []});
+                continue;
+            }
+            const [title, icon, color, groups, extra] = def;
             const page = new Adw.PreferencesPage();
             const entry = {title, sections: [], row: sidebarRow(title, icon, color)};
+            entry.row._page = entry;
+            headers.at(-1)?.pages.push(entry);
+            if (extra === 'appearance') {
+                const group = appearanceGroup(settings);
+                entry.sections.push(this._section(page, group, [{row: group._picker, text: 'appearance light dark follow os mode'}]));
+            }
             if (extra === 'preview')
                 entry.sections.push(this._section(page, previewGroup(settings), []));
             if (extra === 'about')
@@ -171,13 +193,13 @@ export default class MyDockPrefs extends ExtensionPreferences {
             }
             stack.add_named(page, title);
             list.append(entry.row);
-            return entry;
-        });
+            pages.push(entry);
+        }
 
         list.connect('row-selected', (_l, row) => {
-            if (!row)
+            if (!row?._page)
                 return;
-            const {title} = pages[row.get_index()];
+            const {title} = row._page;
             stack.visible_child_name = title;
             titleLabel.label = title;
             contentPage.title = title;
@@ -201,6 +223,8 @@ export default class MyDockPrefs extends ExtensionPreferences {
                 }
                 p.row.visible = any;
             }
+            for (const h of headers)
+                h.row.visible = h.pages.some(p => p.row.visible);
             const selected = list.get_selected_row();
             if (!selected?.visible) {
                 const first = pages.find(p => p.row.visible);
@@ -221,6 +245,8 @@ export default class MyDockPrefs extends ExtensionPreferences {
 
         const bp = new Adw.Breakpoint({condition: Adw.BreakpointCondition.parse('max-width: 560sp')});
         bp.add_setter(split, 'collapsed', true);
+        // collapsed: the content page is shown alone, so give it a close button
+        bp.add_setter(header, 'show_end_title_buttons', true);
         window.add_breakpoint(bp);
     }
 
@@ -243,7 +269,7 @@ export default class MyDockPrefs extends ExtensionPreferences {
             btn.connect('clicked', () => new Gtk.UriLauncher({uri: url}).launch(btn.get_root(), null, null));
             box.append(btn);
         }
-        const group = new Adw.PreferencesGroup();
+        const group = new Adw.PreferencesGroup({css_classes: ['mydock-plain']});
         group.add(box);
         return group;
     }
@@ -251,16 +277,12 @@ export default class MyDockPrefs extends ExtensionPreferences {
     _row(settings, skey, key) {
         const title = TITLES[key] ?? skey.get_summary() ?? key;
 
-        if (ENUM_ROWS[key] || INT_CHOICE_ROWS[key]) {
-            const isEnum = !!ENUM_ROWS[key];
-            const labels = ENUM_ROWS[key] ?? INT_CHOICE_ROWS[key];
+        if (ENUM_ROWS[key]) {
+            const labels = ENUM_ROWS[key];
             const shown = labels.map(l => l[0].toUpperCase() + l.slice(1));
             const row = new Adw.ComboRow({title, model: Gtk.StringList.new(shown)});
-            const read = () => isEnum ? labels.indexOf(settings.get_string(key)) : settings.get_int(key);
-            row.selected = Math.max(0, read());
-            row.connect('notify::selected', () => isEnum
-                ? settings.set_string(key, labels[row.selected])
-                : settings.set_int(key, row.selected));
+            row.selected = Math.max(0, labels.indexOf(settings.get_string(key)));
+            row.connect('notify::selected', () => settings.set_string(key, labels[row.selected]));
             return row;
         }
 
@@ -419,7 +441,54 @@ function previewGroup(settings) {
     const strip = new Gtk.Box({css_classes: ['mydock-preview'], height_request: 170, overflow: Gtk.Overflow.HIDDEN});
     dock.hexpand = true;
     strip.append(dock);
-    const group = new Adw.PreferencesGroup();
+    const group = new Adw.PreferencesGroup({css_classes: ['mydock-plain']});
     group.add(strip);
+    return group;
+}
+
+// macOS window controls: grey dots that light up on hover.
+function windowDots(window) {
+    const box = new Gtk.Box({spacing: 8, valign: Gtk.Align.CENTER, margin_start: 6, css_classes: ['mydock-dots']});
+    for (const [name, tip, fn] of [
+        ['close', 'Close', () => window.close()],
+        ['minimize', 'Minimize', () => window.minimize()],
+        ['maximize', 'Zoom', () => (window.is_maximized() ? window.unmaximize() : window.maximize())],
+    ]) {
+        const btn = new Gtk.Button({tooltip_text: tip, valign: Gtk.Align.CENTER, css_classes: ['mydock-dot', `mydock-dot-${name}`]});
+        btn.connect('clicked', fn);
+        box.append(btn);
+    }
+    return box;
+}
+
+// Light / Dark / Follow OS as mini desktop thumbnails bound to dark-mode.
+function appearanceGroup(settings) {
+    const picker = new Gtk.Box({spacing: 18, halign: Gtk.Align.START, valign: Gtk.Align.START, margin_top: 4, margin_bottom: 4});
+    const buttons = APPEARANCES.map(([label, value, kind]) => {
+        const thumb = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, width_request: 96, height_request: 64, vexpand: false,
+            overflow: Gtk.Overflow.HIDDEN, css_classes: ['mydock-thumb', `mydock-thumb-${kind}`]});
+        thumb.append(new Gtk.Box({halign: Gtk.Align.START, margin_start: 8, margin_top: 8,
+            width_request: 46, height_request: 24, css_classes: ['mydock-thumb-window']}));
+        thumb.append(new Gtk.Box({halign: Gtk.Align.CENTER, valign: Gtk.Align.END, vexpand: true, margin_bottom: 6,
+            width_request: 60, height_request: 10, css_classes: ['mydock-thumb-dock']}));
+        const col = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 6, valign: Gtk.Align.START});
+        col.append(thumb);
+        col.append(new Gtk.Label({label}));
+        const btn = new Gtk.ToggleButton({child: col, tooltip_text: label, css_classes: ['flat', 'mydock-appearance']});
+        btn.connect('toggled', () => {
+            if (btn.active && settings.get_int('dark-mode') !== value)
+                settings.set_int('dark-mode', value);
+        });
+        picker.append(btn);
+        return [btn, value];
+    });
+    buttons.slice(1).forEach(([b]) => b.set_group(buttons[0][0]));
+    const sync = () => buttons.forEach(([b, v]) => (b.active = settings.get_int('dark-mode') === v));
+    settings.connect('changed::dark-mode', sync);
+    sync();
+
+    const group = new Adw.PreferencesGroup({title: 'Appearance'});
+    group.add(picker);
+    group._picker = picker;
     return group;
 }
