@@ -67,33 +67,58 @@
   font-weight: 300;
 }
 
-/* ---- Launchpad (class is on Main.layoutManager.overviewGroup while open) ---- */
-.mydock-launchpad .overview-tile .overview-icon-label,
-.mydock-launchpad .app-well-app .overview-icon-label {
-  color: #ffffff;
-  font-weight: bold;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
-}
-.mydock-launchpad .page-indicator .page-indicator-icon {
-  background-color: rgba(255, 255, 255, 0.85);
-}
-/* search field: dark translucent rounded box, top center */
-.mydock-launchpad .search-entry {
-  width: 400px;
-  padding: 6px 12px;
+/* ---- Launchpad (our own full-screen launcher, launchpad.js) ---- */
+.mydock-launchpad-search {
+  padding: 5px 10px;
   border-radius: 8px;
+  font-size: 11pt;
   color: #ffffff;
-  background-color: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  caret-color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.28);
   box-shadow: none;
 }
-.mydock-launchpad .search-entry:focus {
-  background-color: rgba(0, 0, 0, 0.45);
-  border-color: rgba(255, 255, 255, 0.55);
+.mydock-launchpad-search:focus {
+  background-color: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.45);
 }
-.mydock-launchpad .search-entry .search-entry-icon,
-.mydock-launchpad .search-entry StLabel.hint-text {
-  color: rgba(255, 255, 255, 0.7);
+.mydock-launchpad-search StLabel.hint-text,
+.mydock-launchpad-search-icon {
+  color: rgba(255, 255, 255, 0.75);
+  icon-size: 16px;
+}
+.mydock-launchpad-tile {
+  padding: 4px;
+  border-radius: 14px;
+  background: none;
+  border: none;
+}
+.mydock-launchpad-tile:focus {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+.mydock-launchpad-label {
+  margin-top: 10px;
+  max-width: 150px;
+  font-size: 11pt;
+  font-weight: bold;
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
+}
+.mydock-launchpad-dots {
+  spacing: 14px;
+}
+.mydock-launchpad-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.35);
+}
+.mydock-launchpad-dot:hover {
+  background-color: rgba(255, 255, 255, 0.6);
+}
+.mydock-launchpad-dot:checked {
+  background-color: #ffffff;
 }
 
 /* ---- finderbar ---- */
@@ -178,6 +203,31 @@
     width: 2px;
     border-radius: 1px;
     background-color: #0a84ff;
+}
+
+/* live system stats (CPU / temp / MEM / SSD / network), like the reference menu bar meters */
+#panel.mydock-finderbar .mydock-stats-button {
+    -natural-hpadding: 6px;
+    -minimum-hpadding: 4px;
+}
+.mydock-stats {
+    spacing: 12px;
+}
+.mydock-stat {
+    spacing: 3px;
+}
+.mydock-stat-caption {
+    font-size: 5pt;
+    font-weight: bold;
+}
+.mydock-stat-value {
+    font-size: 9pt;
+    font-weight: bold;
+    font-feature-settings: "tnum";
+}
+.mydock-stat-net {
+    font-size: 6.5pt;
+    text-align: right;
 }
 
 /* ---- stagemanager ---- */
