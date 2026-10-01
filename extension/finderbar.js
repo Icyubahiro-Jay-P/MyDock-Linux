@@ -1,5 +1,6 @@
 // MyDock - Finder bar. Restyles and rearranges the existing Main.panel into a macOS-like menu bar:
 // logo menu + focused app name on the left, quick settings then clock on the right, optional blur.
+// Ctrl + drag moves any other panel item anywhere in the bar; the order is saved in finderbar-order.
 // destroy() puts every moved/hidden panel piece back where it was.
 
 import Clutter from 'gi://Clutter';
@@ -35,6 +36,8 @@ export class FinderBar {
         this._dateIndex = this._dateParent ? this._dateParent.get_children().indexOf(dateBox) : -1;
         this._activitiesVisible = panel.statusArea.activities?.container.visible ?? false;
         this._bannerAlignment = Main.messageTray.bannerAlignment;
+        this._origPos = new Map(); // role -> [parent, index] before we first moved it
+        this._boxes = {left: panel._leftBox, center: panel._centerBox, right: panel._rightBox};
 
         panel.add_style_class_name('mydock-finderbar');
 
@@ -51,6 +54,13 @@ export class FinderBar {
             () => this._stageItem.setToggleState(this._settings.get_boolean('stage-manager')));
         // session mode changes (e.g. after unlock) rebuild the panel boxes and undo our layout
         this._connect(Main.sessionMode, 'updated', () => this._layout());
+
+        // ---- Ctrl + drag reordering ----
+        this._connect(panel, 'captured-event', (_a, ev) => this._onPanelEvent(ev));
+        this._connect(this._settings, 'changed::finderbar-order', () => this._applyOrder());
+        // indicators added later (other extensions, session changes) go back to their saved place
+        for (const box of Object.values(this._boxes))
+            this._connect(box, 'child-added', () => this._queueApplyOrder());
     }
 
     _connect(obj, sig, fn) {
@@ -197,6 +207,201 @@ export class FinderBar {
             panel._rightBox.add_child(dateBox);
         }
         Main.messageTray.bannerAlignment = Clutter.ActorAlign.END;
+        this._applyOrder();
+    }
+
+    // ---- Ctrl + drag reordering ----
+
+    _roleOf(actor) {
+        const area = Main.panel.statusArea;
+        return Object.keys(area).find(r => area[r]?.container === actor) ?? null;
+    }
+
+    _boxName(box) {
+        return Object.keys(this._boxes).find(n => this._boxes[n] === box) ?? null;
+    }
+
+    _pinned(actor) {
+        return actor === this._logoButton.container || actor === this._appButton.container;
+    }
+
+    _remember(actor) {
+        const role = this._roleOf(actor);
+        const parent = actor.get_parent();
+        if (role && parent && !this._origPos.has(role))
+            this._origPos.set(role, [parent, parent.get_children().indexOf(actor)]);
+    }
+
+    // first index a movable item may take in `box` (logo + app name stay first on the left)
+    _minIndex(box, kids) {
+        return box === this._boxes.left ? kids.indexOf(this._appButton.container) + 1 : 0;
+    }
+
+    _queueApplyOrder() {
+        if (this._applying || this._orderId)
+            return;
+        this._orderId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._orderId = 0;
+            this._applyOrder();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _applyOrder() {
+        const order = this._settings.get_strv('finderbar-order');
+        if (!order.length || this._drag)
+            return;
+        this._applying = true;
+        const next = {};
+        for (const entry of order) {
+            const [name, role] = entry.split(':');
+            const box = this._boxes[name];
+            const actor = Main.panel.statusArea[role]?.container;
+            if (!box || !actor || this._pinned(actor))
+                continue;
+            next[name] ??= this._minIndex(box, box.get_children());
+            const parent = actor.get_parent();
+            if (parent !== box || box.get_children().indexOf(actor) !== next[name]) {
+                this._remember(actor);
+                parent?.remove_child(actor);
+                box.insert_child_at_index(actor, Math.min(next[name], box.get_n_children()));
+            }
+            next[name]++;
+        }
+        this._applying = false;
+    }
+
+    _saveOrder() {
+        const order = [];
+        for (const [name, box] of Object.entries(this._boxes)) {
+            for (const kid of box.get_children()) {
+                const role = this._roleOf(kid);
+                if (role && !this._pinned(kid))
+                    order.push(`${name}:${role}`);
+            }
+        }
+        this._settings.set_strv('finderbar-order', order);
+    }
+
+    _onPanelEvent(ev) {
+        const type = ev.type();
+        if (!this._drag) {
+            if (type !== Clutter.EventType.BUTTON_PRESS || ev.get_button() !== Clutter.BUTTON_PRIMARY ||
+                !(ev.get_state() & Clutter.ModifierType.CONTROL_MASK))
+                return Clutter.EVENT_PROPAGATE;
+            const boxes = Object.values(this._boxes);
+            let actor = ev.get_source();
+            while (actor && !boxes.includes(actor.get_parent()))
+                actor = actor.get_parent();
+            if (!actor || this._pinned(actor) || !this._roleOf(actor))
+                return Clutter.EVENT_PROPAGATE;
+            this._startDrag(actor, ev);
+            return Clutter.EVENT_STOP;
+        }
+        if (type === Clutter.EventType.MOTION) {
+            this._moveDrag(ev);
+        } else if (type === Clutter.EventType.BUTTON_RELEASE) {
+            this._endDrag(true);
+        } else if (type === Clutter.EventType.KEY_PRESS && ev.get_key_symbol() === Clutter.KEY_Escape) {
+            this._endDrag(false);
+        }
+        return Clutter.EVENT_STOP;
+    }
+
+    _startDrag(actor, ev) {
+        const [px, py] = ev.get_coords();
+        const [ax, ay] = actor.get_transformed_position();
+        const clone = new Clutter.Clone({source: actor, opacity: 210, reactive: false});
+        const marker = new St.Widget({style_class: 'mydock-finderbar-marker', visible: false});
+        Main.uiGroup.add_child(clone);
+        Main.uiGroup.add_child(marker);
+        clone.set_position(ax, ay);
+        actor.opacity = 80;
+        this._drag = {actor, clone, marker, dx: px - ax, dy: py - ay, target: null};
+        // keep receiving motion/release when the pointer leaves the panel
+        this._grab = global.stage.grab(Main.panel);
+        this._moveDrag(ev);
+    }
+
+    // box + child index under the pointer, or null when the pointer is off the panel
+    _dropTarget(px, py) {
+        const [, panelY] = Main.panel.get_transformed_position();
+        if (py < panelY - 20 || py > panelY + Main.panel.height + 20)
+            return null;
+        const {actor} = this._drag;
+        let best = null;
+        for (const box of Object.values(this._boxes)) {
+            const [bx] = box.get_transformed_position();
+            const [bw] = box.get_transformed_size();
+            const dist = px < bx ? bx - px : Math.max(0, px - bx - bw);
+            if (!best || dist < best.dist)
+                best = {box, dist};
+        }
+        const box = best.box;
+        const kids = box.get_children().filter(k => k !== actor);
+        const min = this._minIndex(box, kids);
+        let index = kids.length;
+        for (let i = min; i < kids.length; i++) {
+            if (!kids[i].visible)
+                continue;
+            const [kx] = kids[i].get_transformed_position();
+            const [kw] = kids[i].get_transformed_size();
+            if (px < kx + kw / 2) {
+                index = i;
+                break;
+            }
+        }
+        return {box, kids, index: Math.max(index, min)};
+    }
+
+    _moveDrag(ev) {
+        const [px, py] = ev.get_coords();
+        const d = this._drag;
+        d.clone.set_position(Math.round(px - d.dx), Math.round(py - d.dy));
+        d.target = this._dropTarget(px, py);
+        if (!d.target) {
+            d.marker.hide();
+            return;
+        }
+        // marker at the left edge of the item we insert before, else after the last visible item
+        const {box, kids, index} = d.target;
+        const before = kids.slice(index).find(k => k.visible);
+        const after = kids.slice(0, index).reverse().find(k => k.visible);
+        let x;
+        if (before) {
+            [x] = before.get_transformed_position();
+        } else if (after) {
+            const [ax] = after.get_transformed_position();
+            x = ax + after.get_transformed_size()[0];
+        } else {
+            [x] = box.get_transformed_position();
+        }
+        const [, y] = Main.panel.get_transformed_position();
+        d.marker.set_position(Math.round(x - 1), Math.round(y + 4));
+        d.marker.height = Math.max(1, Main.panel.height - 8);
+        d.marker.show();
+    }
+
+    _endDrag(drop) {
+        const d = this._drag;
+        if (!d)
+            return;
+        this._drag = null;
+        this._grab?.dismiss();
+        this._grab = null;
+        d.clone.destroy();
+        d.marker.destroy();
+        d.actor.opacity = 255;
+        if (!drop || !d.target)
+            return;
+        const {box, kids, index} = d.target;
+        this._remember(d.actor);
+        this._applying = true;
+        d.actor.get_parent()?.remove_child(d.actor);
+        // kids excludes the dragged actor, so after removing it `index` is its slot in box
+        box.insert_child_at_index(d.actor, Math.min(index, box.get_n_children()));
+        this._applying = false;
+        this._saveOrder();
     }
 
     _syncBlur() {
@@ -213,9 +418,24 @@ export class FinderBar {
     }
 
     destroy() {
+        this._endDrag(false);
         for (const [obj, id] of this._sigs)
             obj.disconnect(id);
         this._sigs = [];
+        if (this._orderId) {
+            GLib.source_remove(this._orderId);
+            this._orderId = 0;
+        }
+        // put reordered items back, lowest original index first so the indices still line up
+        const moved = [...this._origPos].sort((a, b) => a[1][1] - b[1][1]);
+        for (const [role, [parent, index]] of moved) {
+            const actor = Main.panel.statusArea[role]?.container;
+            if (!actor)
+                continue;
+            actor.get_parent()?.remove_child(actor);
+            parent.insert_child_at_index(actor, Math.min(Math.max(index, 0), parent.get_n_children()));
+        }
+        this._origPos.clear();
         for (const b of this._bindings)
             b.unbind();
         this._bindings = [];
