@@ -6,7 +6,7 @@ import {
 } from './sysinfo.js';
 
 const a = parseCpuStat('cpu  100 0 100 700 100 0 0 0 0 0\ncpu0 1 2 3');
-const b = parseCpuStat('cpu  150 0 150 850 150 0 0 0 0 0\n');
+const b = parseCpuStat('cpu  200 0 100 750 150 0 0 0 0 0\n');
 assert.deepEqual(a, {total: 1000, idle: 800});
 assert.equal(cpuUsage(a, b), 50); // 100 busy of 200 jiffies
 assert.equal(cpuUsage(a, a), 0);
