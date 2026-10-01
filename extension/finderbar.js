@@ -1,5 +1,6 @@
 // MyDock - Finder bar. Restyles and rearranges the existing Main.panel into a macOS-like menu bar:
-// logo menu + focused app name on the left, quick settings then clock on the right, optional blur.
+// logo menu + focused app name + File / View / Window menus on the left, quick settings then clock on
+// the right, optional blur.
 // Ctrl + drag moves any other panel item anywhere in the bar; the order is saved in finderbar-order.
 // destroy() puts every moved/hidden panel piece back where it was.
 
@@ -8,6 +9,7 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import GnomeDesktop from 'gi://GnomeDesktop';
+import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -16,9 +18,12 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as Util from 'resource:///org/gnome/shell/misc/util.js';
 import * as SystemActions from 'resource:///org/gnome/shell/misc/systemActions.js';
 import {AppMenu} from 'resource:///org/gnome/shell/ui/appMenu.js';
+import {showAboutPC, attachTempPopup} from './aboutpc.js';
 
 const STORE_APPS = ['snap-store_snap-store.desktop', 'io.snapcraft.Store.desktop', 'org.gnome.Software.desktop'];
+const TASK_APPS = ['org.gnome.SystemMonitor.desktop', 'gnome-system-monitor.desktop', 'gnome-system-monitor-kde.desktop'];
 const FALLBACK_APP = 'org.gnome.Nautilus.desktop';
+const RECENT_MAX = 10;
 // strftime conversions that show seconds (%S %s %T %r %X %c %f, with optional flags/E/O); %% is a literal
 const SECONDS_RE = /%[-_0^#]*[EO]?[sSTrXcf]/;
 
@@ -38,6 +43,27 @@ function readText(path) {
     } catch {
         return null;
     }
+}
+
+// newest RECENT_MAX local files in the GTK recent list that still exist, as [uri, name]
+function recentFiles() {
+    const bf = new GLib.BookmarkFile();
+    try {
+        bf.load_from_file(GLib.build_filenamev([GLib.get_user_data_dir(), 'recently-used.xbel']));
+    } catch {
+        return [];
+    }
+    const out = [];
+    const uris = bf.get_uris().filter(u => u.startsWith('file://'))
+        .map(u => [u, bf.get_modified_date_time(u)?.to_unix() ?? 0]).sort((a, b) => b[1] - a[1]);
+    for (const [uri] of uris) {
+        const file = Gio.File.new_for_uri(uri);
+        if (file.query_exists(null))
+            out.push([uri, file.get_basename()]);
+        if (out.length === RECENT_MAX)
+            break;
+    }
+    return out;
 }
 
 // /proc/stat first line: user nice system idle iowait irq softirq steal ...
@@ -133,8 +159,15 @@ export class FinderBar {
         this._rightWidth = new RightBoxWidth();
         panel._rightBox.add_constraint(this._rightWidth);
 
+        // GNOME's own clock / quick settings popups get the finder menu look too
+        this._gnomeMenus = ['dateMenu', 'quickSettings'].map(r => panel.statusArea[r]?.menu?.actor).filter(a => a);
+        for (const actor of this._gnomeMenus)
+            actor.add_style_class_name('mydock-menu');
+
+        this._menuBtns = [];
         this._buildLogo();
         this._buildAppName();
+        this._buildAppMenus();
         this._buildClock();
         this._statBtn = {}; // stat key -> its PanelMenu.Button
         this._stat = {}; // stat key -> its value label
@@ -148,8 +181,6 @@ export class FinderBar {
         this._connect(this._settings, 'changed::finderbar-stats', () => this._syncStats());
         for (const [key] of STATS)
             this._connect(this._settings, `changed::stats-${key}`, () => this._syncStat(key));
-        this._connect(this._settings, 'changed::stage-manager',
-            () => this._stageItem.setToggleState(this._settings.get_boolean('stage-manager')));
         // session mode changes (e.g. after unlock) rebuild the panel boxes and undo our layout
         this._connect(Main.sessionMode, 'updated', () => this._layout());
 
@@ -176,16 +207,13 @@ export class FinderBar {
         this._syncLogo();
 
         const menu = btn.menu;
+        menu.actor.add_style_class_name('mydock-menu');
         const appSys = Shell.AppSystem.get_default();
+        const sep = () => menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-        menu.addAction('About This Computer', () => {
-            const about = appSys.lookup_app('gnome-about-panel.desktop');
-            if (about)
-                about.activate();
-            else
-                Util.spawn(['gnome-control-center', 'system', 'about']);
-        });
-        menu.addAction('System Settings...', () => {
+        menu.addAction('About This PC', () => showAboutPC(this._ext));
+        sep();
+        menu.addAction('System Settings', () => {
             const s = appSys.lookup_app('org.gnome.Settings.desktop');
             if (s)
                 s.activate();
@@ -194,31 +222,56 @@ export class FinderBar {
         });
         const store = STORE_APPS.map(id => appSys.lookup_app(id)).find(a => a);
         if (store)
-            menu.addAction('App Store...', () => store.activate());
+            menu.addAction('App Store', () => store.activate());
+        sep();
+        const task = TASK_APPS.map(id => appSys.lookup_app(id)).find(a => a);
+        menu.addAction('Task Manager', () => task ? task.activate() : Util.spawn(['gnome-system-monitor']));
+        sep();
 
-        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-
-        this._stageItem = new PopupMenu.PopupSwitchMenuItem('Stage Manager',
-            this._settings.get_boolean('stage-manager'));
-        this._stageItem.connect('toggled', (_item, state) => this._settings.set_boolean('stage-manager', state));
-        menu.addMenuItem(this._stageItem);
-        menu.addAction('MyDock Settings...', () => this._ext.openPreferences());
-
-        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        // filled each time the logo menu opens (a PopupSubMenu with no items would not open)
+        const recent = new PopupMenu.PopupSubMenuMenuItem('Recently opened files');
+        menu.addMenuItem(recent);
+        menu.connect('open-state-changed', (_m, open) => {
+            if (open)
+                this._fillRecent(recent.menu);
+        });
+        sep();
 
         const actions = SystemActions.getDefault();
-        for (const [label, prop, fn] of [
+        for (const entry of [
             ['Sleep', 'can-suspend', () => actions.activateSuspend()],
-            ['Restart...', 'can-restart', () => actions.activateRestart()],
-            ['Shut Down...', 'can-power-off', () => actions.activatePowerOff()],
-            ['Lock Screen', 'can-lock-screen', () => actions.activateLockScreen()],
-            ['Log Out...', 'can-logout', () => actions.activateLogout()],
+            ['Restart', 'can-restart', () => actions.activateRestart()],
+            ['Shut Down', 'can-power-off', () => actions.activatePowerOff()],
+            null,
+            ['Lock', 'can-lock-screen', () => actions.activateLockScreen()],
+            ['Log out', 'can-logout', () => actions.activateLogout()],
         ]) {
+            if (!entry) {
+                sep();
+                continue;
+            }
+            const [label, prop, fn] = entry;
             const item = menu.addAction(label, fn);
             this._bindings.push(actions.bind_property(prop, item, 'visible', GObject.BindingFlags.SYNC_CREATE));
         }
 
         Main.panel.addToStatusArea('mydock-logo', btn, 0, 'left');
+    }
+
+    _fillRecent(menu) {
+        menu.removeAll();
+        const files = recentFiles();
+        for (const [uri, name] of files) {
+            menu.addAction(name, () => {
+                try {
+                    Gio.AppInfo.launch_default_for_uri(uri, global.create_app_launch_context(0, -1));
+                } catch (e) {
+                    logError(e, `MyDock: cannot open ${uri}`);
+                }
+            });
+        }
+        if (!files.length)
+            menu.addMenuItem(new PopupMenu.PopupMenuItem('No recent files', {reactive: false}));
     }
 
     _syncLogo() {
@@ -240,6 +293,7 @@ export class FinderBar {
         });
         btn.add_child(this._appLabel);
         this._appMenu = new AppMenu(btn);
+        this._appMenu.actor.add_style_class_name('mydock-menu');
         btn.setMenu(this._appMenu);
         this._appButton = btn;
         Main.panel.addToStatusArea('mydock-appname', btn, 1, 'left');
@@ -255,6 +309,90 @@ export class FinderBar {
             Shell.AppSystem.get_default().lookup_app(FALLBACK_APP);
         this._appLabel.text = app?.get_name() ?? 'Desktop';
         this._appMenu.setApp(app);
+        for (const b of this._menuBtns)
+            b.container.visible = !!this._tracker.focus_app;
+    }
+
+    // ---- left: File / View / Window menus for the focused app ----
+    // each menu is rebuilt when it opens; with no window every item is just insensitive, so a
+    // menu is never empty (an empty PopupMenu refuses to open)
+
+    _buildAppMenus() {
+        const fills = [['File', m => this._fillFile(m)], ['View', m => this._fillView(m)],
+            ['Window', m => this._fillWindow(m)]];
+        fills.forEach(([label, fill], i) => {
+            const btn = new PanelMenu.Button(0.0, label);
+            btn.add_style_class_name('mydock-appmenu-button');
+            btn.add_child(new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER}));
+            btn.menu.actor.add_style_class_name('mydock-menu');
+            const build = () => {
+                btn.menu.removeAll();
+                fill(btn.menu);
+            };
+            build();
+            btn.menu.connect('open-state-changed', (_m, open) => {
+                if (open)
+                    build();
+            });
+            Main.panel.addToStatusArea(`mydock-menu-${label.toLowerCase()}`, btn, 2 + i, 'left');
+            this._menuBtns.push(btn);
+        });
+        this._syncApp();
+    }
+
+    // focused app and its window (the focused one, else its most recent)
+    _target() {
+        const app = this._tracker.focus_app;
+        const focus = global.display.focus_window;
+        const win = focus && this._tracker.get_window_app(focus) === app ? focus : app?.get_windows()[0];
+        return [app, win ?? null];
+    }
+
+    _addItem(menu, label, ok, fn) {
+        menu.addAction(label, fn).setSensitive(!!ok);
+    }
+
+    _fillFile(menu) {
+        const [app, win] = this._target();
+        this._addItem(menu, 'New Window', app?.can_open_new_window(), () => app.open_new_window(-1));
+        this._addItem(menu, 'Close Window', win, () => win.delete(global.get_current_time()));
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        this._addItem(menu, `Quit ${app?.get_name() ?? ''}`.trim(), app, () => app.request_quit());
+    }
+
+    _fillView(menu) {
+        const [, win] = this._target();
+        this._addItem(menu, win?.is_fullscreen() ? 'Exit Full Screen' : 'Enter Full Screen', win,
+            () => win.is_fullscreen() ? win.unmake_fullscreen() : win.make_fullscreen());
+    }
+
+    _fillWindow(menu) {
+        const [app, win] = this._target();
+        const BOTH = Meta.MaximizeFlags.BOTH;
+        this._addItem(menu, 'Minimize', win?.can_minimize(), () => win.minimize());
+        this._addItem(menu, 'Zoom', win?.can_maximize(), () => win.get_maximized() === BOTH
+            ? win.unmaximize(BOTH) : win.maximize(BOTH));
+        // half of the work area; mutter's own tiling isn't exposed to JS
+        const tile = right => {
+            const area = win.get_work_area_current_monitor();
+            const w = Math.floor(area.width / 2);
+            if (win.get_maximized())
+                win.unmaximize(BOTH);
+            win.move_resize_frame(true, right ? area.x + area.width - w : area.x, area.y, w, area.height);
+        };
+        this._addItem(menu, 'Tile Window to Left of Screen', win?.allows_resize(), () => tile(false));
+        this._addItem(menu, 'Tile Window to Right of Screen', win?.allows_resize(), () => tile(true));
+        menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        // Shell.App.activate raises all of the app's windows on this workspace
+        this._addItem(menu, 'Bring All to Front', app, () => app.activate());
+        const wins = app?.get_windows() ?? [];
+        if (wins.length)
+            menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        for (const w of wins) {
+            const item = menu.addAction(w.get_title() || app.get_name(), () => Main.activateWindow(w));
+            if (w === win)
+                item.setOrnament(PopupMenu.Ornament.DOT);
+        }
     }
 
     // ---- right: clock ----
@@ -323,8 +461,13 @@ export class FinderBar {
 
     _buildStat(key, initial) {
         const [, icon, name] = STATS.find(s => s[0] === key);
-        const btn = new PanelMenu.Button(0.0, name, true);
+        // only the temperature has a popup (aboutpc.js CPU card)
+        const btn = new PanelMenu.Button(0.0, name, key !== 'temp');
         btn.add_style_class_name('mydock-stat-button');
+        if (key === 'temp') {
+            btn.menu.actor.add_style_class_name('mydock-menu');
+            this._tempPopup = attachTempPopup(btn.menu, this._tempFile);
+        }
         const cell = new St.BoxLayout({style_class: 'mydock-stat', y_align: Clutter.ActorAlign.CENTER});
         const file = Gio.File.new_for_path(`${this._ext.path}/icons/mydock-${icon}-symbolic.svg`);
         cell.add_child(new St.Icon({
@@ -380,6 +523,10 @@ export class FinderBar {
     }
 
     _destroyStat(key) {
+        if (key === 'temp') {
+            this._tempPopup?.destroy();
+            this._tempPopup = null;
+        }
         this._statBtn[key].destroy(); // the panel drops statusArea[role] on destroy
         delete this._statBtn[key];
         delete this._stat[key];
@@ -486,7 +633,8 @@ export class FinderBar {
     }
 
     _pinned(actor) {
-        return actor === this._logoButton.container || actor === this._appButton.container;
+        return actor === this._logoButton.container || actor === this._appButton.container ||
+            this._menuBtns.some(b => b.container === actor);
     }
 
     _remember(actor) {
@@ -496,9 +644,10 @@ export class FinderBar {
             this._origPos.set(role, [parent, parent.get_children().indexOf(actor)]);
     }
 
-    // first index a movable item may take in `box` (logo + app name stay first on the left)
+    // first index a movable item may take in `box` (logo, app name and its menus stay first on the left)
     _minIndex(box, kids) {
-        return box === this._boxes.left ? kids.indexOf(this._appButton.container) + 1 : 0;
+        const last = this._menuBtns.at(-1)?.container ?? this._appButton.container;
+        return box === this._boxes.left ? kids.indexOf(last) + 1 : 0;
     }
 
     _queueApplyOrder() {
@@ -717,6 +866,9 @@ export class FinderBar {
         }
 
         this._destroyStats();
+        for (const b of this._menuBtns)
+            b.destroy();
+        this._menuBtns = [];
         this._appButton.destroy(); // also destroys its menu
         this._logoButton.destroy();
 
@@ -726,6 +878,9 @@ export class FinderBar {
         }
         Main.panel.remove_style_class_name('mydock-finderbar-blur');
         Main.panel.remove_style_class_name('mydock-finderbar');
+        for (const actor of this._gnomeMenus)
+            actor.remove_style_class_name('mydock-menu');
+        this._gnomeMenus = [];
         Main.panel._rightBox.remove_constraint(this._rightWidth);
         this._rightWidth = null;
 
