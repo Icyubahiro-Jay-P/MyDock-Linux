@@ -44,9 +44,6 @@ window.mydock-window.mydock-dark {
     background-color: alpha(currentColor, 0.07);
     box-shadow: inset 0 0 0 1px alpha(currentColor, 0.14);
 }
-.mydock-prefs .mydock-search:focus-within {
-    box-shadow: inset 0 0 0 1px @mydock_blue, 0 0 0 3px alpha(@mydock_blue, 0.35);
-}
 .mydock-prefs .mydock-search image {
     opacity: 0.7;
 }
@@ -173,7 +170,7 @@ window.mydock-window.mydock-dark {
 .mydock-prefs preferencesgroup:not(.mydock-plain) .boxed-list > row:active {
     background: none;
 }
-.mydock-prefs .boxed-list > row .title {
+.mydock-prefs .boxed-list > row label.title {
     font-weight: 600;
 }
 .mydock-prefs .mydock-footnote {
@@ -216,7 +213,11 @@ window.mydock-window.mydock-dark {
 .mydock-prefs scale.mydock-scale marks indicator {
     min-width: 1px;
     min-height: 4px;
+    margin: 0;
     background-color: alpha(currentColor, 0.3);
+}
+.mydock-prefs scale.mydock-scale marks {
+    margin-top: 4px;
 }
 
 /* Dropdowns: compact popup button with a blue up/down chevron cap */
@@ -281,7 +282,7 @@ window.mydock-window.mydock-dark {
 .mydock-dark .mydock-prefs .mydock-hero-author link {
     color: #4f93ff;
 }
-.mydock-prefs .mydock-update-row.mydock-error .title {
+.mydock-prefs .mydock-update-row.mydock-error label.title {
     color: @error_color;
 }
 .mydock-prefs .mydock-support > box {
@@ -291,7 +292,7 @@ window.mydock-window.mydock-dark {
     margin-top: 2px;
     margin-bottom: 4px;
 }
-.mydock-prefs .mydock-momo .title {
+.mydock-prefs .mydock-momo label.title {
     font-feature-settings: "tnum";
     letter-spacing: 0.5px;
 }
