@@ -28,11 +28,11 @@ if [ "$mode" = deb ]; then
 else
     f=dock-install.sh
 fi
-dl() { if command -v curl >/dev/null; then curl -fsSL --max-time 300 -o "$2" "$1"; else wget -q -O "$2" "$1"; fi; }
+dl() { if command -v curl >/dev/null; then curl --proto '=https' --proto-redir '=https' -fsSL --max-time 300 -o "$2" "$1"; else wget -q --https-only -O "$2" "$1"; fi; }
 d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; cd "$d"
 dl "$base/$f" "$f" || { echo "Download failed: $base/$f"; exit 1; }
 dl "$base/SHA256SUMS" SHA256SUMS || { echo "Download failed: $base/SHA256SUMS"; exit 1; }
-sha256sum -c --ignore-missing SHA256SUMS || { echo "Checksum check failed, nothing was installed."; exit 1; }
+grep -E "^[0-9a-f]{64} [ *]$f\$" SHA256SUMS | sha256sum -c - || { echo "Checksum check failed, nothing was installed."; exit 1; }
 if [ "$mode" = deb ]; then pkexec apt-get install -y "$d/$f"; else bash "$f"; fi`;
 
 export class Updater {
@@ -99,9 +99,11 @@ export class Updater {
             try {
                 [, out] = p.communicate_utf8_finish(res);
             } catch (e) {
+                this._busy = false;
                 return; // cancelled: the extension went away
             }
             this._busy = false;
+            out = out ?? '';
             if (!p.get_successful()) {
                 const last = out.trim().split('\n').pop() || `exit ${p.get_exit_status()}`;
                 console.log(`MY DOCK FINDER FOR LINUX: update failed:\n${out}`);
