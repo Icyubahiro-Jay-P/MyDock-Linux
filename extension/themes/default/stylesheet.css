@@ -606,7 +606,9 @@
 .mydock-temp-row {
   font-weight: bold;
   font-size: 9pt;
+  color: #f2f2f7; /* the non-reactive item would grey it out */
 }
+.mydock-light .mydock-temp-row { color: #1c1c1e; }
 
 /* ---- statusmenus ---- */
 /* Status items (statusmenus.js). Menu chrome comes from .mydock-menu (finderbar); only widgets here. */
