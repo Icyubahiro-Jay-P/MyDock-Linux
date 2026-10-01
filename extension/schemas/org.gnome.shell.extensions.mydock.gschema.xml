@@ -15,6 +15,7 @@
     <key name="icon-space" type="i"><range min="0" max="40"/><default>8</default><summary>Space between icons</summary></key>
     <key name="edge-distance" type="i"><range min="0" max="64"/><default>4</default><summary>Gap between dock and screen edge</summary></key>
     <key name="blur" type="i"><range min="0" max="60"/><default>15</default><summary>Background blur radius</summary></key>
+    <key name="blur-windows" type="b"><default>false</default><summary>Blur windows behind the Dock, not just the wallpaper</summary><description>Off: the wallpaper is blurred once with clean rounded corners (fastest). On: whatever is behind the Dock is blurred live, with slightly blurred corner tips.</description></key>
     <key name="opacity" type="i"><range min="0" max="100"/><default>45</default><summary>Background opacity (percent)</summary></key>
     <key name="autohide" type="b"><default>false</default><summary>Auto-hide the dock</summary></key>
     <key name="multi-monitor" type="b"><default>true</default><summary>Dock on every monitor</summary></key>
