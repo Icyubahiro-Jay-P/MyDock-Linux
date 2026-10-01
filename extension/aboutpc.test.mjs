@@ -13,7 +13,7 @@ assert.equal(cpuUsage(a, a), 0);
 assert.equal(parseCpuStat(''), null);
 
 assert.deepEqual(parseSensors([['Package id 0\n', '47000\n'], ['Core 0\n', '46499'], [null, '45000'], ['Core 2', null]]),
-    [['Package id 0', '47°'], ['Core 0', '46°'], ['Sensor 3', '45°']]);
+    [['Core 0', '46°'], ['Sensor 3', '45°'], ['Package id 0', '47°']]);
 
 assert.equal(parseCpuModel('processor\t: 0\nmodel name\t: Intel(R) Core(TM)  i5-6300U CPU @ 2.40GHz\n'),
     'Intel(R) Core(TM) i5-6300U CPU @ 2.40GHz');
