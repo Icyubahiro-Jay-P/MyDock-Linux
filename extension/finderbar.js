@@ -23,6 +23,8 @@ const FALLBACK_APP = 'org.gnome.Nautilus.desktop';
 const SECONDS_RE = /%[-_0^#]*[EO]?[sSTrXcf]/;
 
 const STATS_SECONDS = 2;
+// [stat key (settings key is stats-<key>), icon file in icons/mydock-<icon>-symbolic.svg]
+const STATS = [['cpu', 'cpu'], ['temp', 'temp'], ['mem', 'memory'], ['disk', 'disk'], ['net', 'network']];
 
 function readText(path) {
     try {
@@ -276,18 +278,18 @@ export class FinderBar {
     _buildStats() {
         const btn = new PanelMenu.Button(0.0, 'System Stats', true);
         btn.add_style_class_name('mydock-stats-button');
-        const box = new St.BoxLayout({style_class: 'mydock-stats'});
-        // [key, caption]; captions are stacked letters like the macOS menu bar meters
+        const box = new St.BoxLayout({style_class: 'mydock-stats', y_align: Clutter.ActorAlign.CENTER});
         this._stat = {};
-        for (const [key, caption] of [['cpu', 'CPU'], ['temp', ''], ['mem', 'MEM'], ['disk', 'SSD'], ['net', '']]) {
+        this._statCell = {};
+        this._statOk = {};
+        for (const [key, icon] of STATS) {
             const cell = new St.BoxLayout({style_class: 'mydock-stat', y_align: Clutter.ActorAlign.CENTER});
-            if (caption) {
-                cell.add_child(new St.Label({
-                    text: caption.split('').join('\n'),
-                    style_class: 'mydock-stat-caption',
-                    y_align: Clutter.ActorAlign.CENTER,
-                }));
-            }
+            const file = Gio.File.new_for_path(`${this._ext.path}/icons/mydock-${icon}-symbolic.svg`);
+            cell.add_child(new St.Icon({
+                gicon: new Gio.FileIcon({file}),
+                style_class: 'mydock-stat-icon',
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
             const value = new St.Label({
                 style_class: key === 'net' ? 'mydock-stat-value mydock-stat-net' : 'mydock-stat-value',
                 y_align: Clutter.ActorAlign.CENTER,
@@ -295,13 +297,19 @@ export class FinderBar {
             cell.add_child(value);
             box.add_child(cell);
             this._stat[key] = value;
+            this._statCell[key] = cell;
+            this._statOk[key] = true;
+            this._statSigs ??= [];
+            this._statSigs.push(this._settings.connect(`changed::stats-${key}`, () => this._syncStatCells()));
         }
         btn.add_child(box);
         this._statsButton = btn;
         this._tempFile = findTempFile();
+        this._statOk.temp = !!this._tempFile;
         this._prevCpu = null;
         this._prevNet = null;
         this._statTick = 0;
+        this._syncStatCells();
         Main.panel.addToStatusArea('mydock-stats', btn, 0, 'right');
         this._updateStats();
         this._statsId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, STATS_SECONDS, () => {
@@ -310,14 +318,28 @@ export class FinderBar {
         });
     }
 
+    // each stat has its own on/off key; a stat the system can't provide stays hidden
+    _syncStatCells() {
+        let any = false;
+        for (const [key] of STATS) {
+            const on = this._settings.get_boolean(`stats-${key}`) && this._statOk[key];
+            this._statCell[key].visible = on;
+            any ||= on;
+        }
+        this._statsButton.visible = any;
+    }
+
     _destroyStats() {
         if (this._statsId) {
             GLib.source_remove(this._statsId);
             this._statsId = 0;
         }
+        for (const id of this._statSigs ?? [])
+            this._settings.disconnect(id);
+        this._statSigs = null;
         this._statsButton?.destroy();
         this._statsButton = null;
-        this._stat = null;
+        this._stat = this._statCell = null;
     }
 
     _updateStats() {
@@ -330,7 +352,10 @@ export class FinderBar {
         this._prevCpu = cpu;
 
         const temp = this._tempFile ? parseInt(readText(this._tempFile)) : NaN;
-        this._stat.temp.get_parent().visible = !isNaN(temp);
+        if (this._statOk.temp === isNaN(temp)) {
+            this._statOk.temp = !isNaN(temp);
+            this._syncStatCells();
+        }
         this._stat.temp.text = `${Math.round(temp / 1000)}\u00b0`;
 
         const mem = readText('/proc/meminfo');
@@ -346,7 +371,8 @@ export class FinderBar {
                 const free = info.get_attribute_uint64('filesystem::free');
                 this._stat.disk.text = size ? `${Math.round(100 * (size - free) / size)}%` : '';
             } catch {
-                this._stat.disk.get_parent().hide();
+                this._statOk.disk = false;
+                this._syncStatCells();
             }
         }
 
