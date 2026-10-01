@@ -46,10 +46,10 @@ function appFromSource(source) {
     return source?.app instanceof Shell.App ? source.app : null;
 }
 
-// Rounded-rectangle alpha mask over a fixed strip. The rect comes in as uniforms, so moving or
-// resizing the dock only updates four floats: the texture size never changes (no reallocation
-// per magnify frame) and nothing below it is re-blurred.
-const MASK_DECL = 'uniform vec4 rect; uniform vec3 info;\n'; // rect x y w h, info strip w h + radius
+// Rounded-rectangle alpha mask. The rect comes in as uniforms, so moving or resizing the dock
+// only updates a few floats: the texture keeps its size (no reallocation per magnify frame) and
+// nothing below it is re-rendered or re-blurred.
+const MASK_DECL = 'uniform vec4 rect; uniform vec3 info;\n'; // rect x y w h, info texture w h + radius
 const MASK_CODE = `
 vec2 p = cogl_tex_coord_in[0].xy * info.xy - rect.xy - rect.zw * 0.5;
 vec2 q = abs(p) - (rect.zw * 0.5 - vec2(info.z));
@@ -110,7 +110,7 @@ class DockBlur {
     _buildWallpaper() {
         const bar = this._bar, mon = bar.monitor;
         // monitor-sized, kept at the monitor origin (see sync); the strip clip limits painting
-        // and the mask texture to the dock's row
+        // to the dock's row
         this._wrap = new St.Widget({width: mon.width, height: mon.height});
         this._inner = new St.Widget({width: mon.width, height: mon.height});
         this._effect = new Shell.BlurEffect({mode: Shell.BlurMode.ACTOR, brightness: 1.0});
@@ -148,7 +148,8 @@ class DockBlur {
         // strip = the bar's full row, a constant size: the background stays inside it
         const stripY = actor.y - mon.y + ty, stripH = actor.height;
         this._wrap.set_clip(0, stripY, mon.width, stripH);
-        this._mask.setShape(mon.width, stripH, actor.x - mon.x + box.x1, box.y1, w, h, r);
+        // the mask's texture is the whole wrap (the clip only limits painting): wrap coordinates
+        this._mask.setShape(mon.width, mon.height, actor.x - mon.x + box.x1, stripY + box.y1, w, h, r);
     }
 
     _teardown() {
