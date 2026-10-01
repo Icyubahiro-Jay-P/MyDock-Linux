@@ -26,7 +26,7 @@ const FEATURES = [
     ['stageManager', StageManager, 'stage-manager'],
     ['minimize', MinimizeEffects, null],
     ['windowButtons', WindowButtons, 'window-buttons-left'],
-    ['updater', Updater, 'check-updates'],
+    ['updater', Updater, null], // check-updates only gates the daily check; the About page can always ask
 ];
 
 export default class MyDockExtension extends Extension {
