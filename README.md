@@ -40,7 +40,7 @@ GNOME 49 and 50 (Ubuntu 25.10 / 26.04) are **not tested**. See [Compatibility](#
 
 ### .deb package (Ubuntu, Debian)
 
-Download `dock_<version>_all.deb` (for example `dock_1.1.0_all.deb`) from the [Releases page](https://github.com/Icyubahiro-Jay-P/MyDock-Linux/releases), then:
+Download `dock_<version>_all.deb` (for example `dock_1.1.1_all.deb`) from the [Releases page](https://github.com/Icyubahiro-Jay-P/MyDock-Linux/releases), then:
 
 ```bash
 sudo apt install ./dock_<version>_all.deb
@@ -72,7 +72,7 @@ See [Building](#building) for what `build.sh` needs.
 
 ## What the installer does
 
-- Installs to `~/.local/share/gnome-shell/extensions/mydock@jay-p` and enables it for your user. The ID `mydock@jay-p` is historical and stays the same so updates and your settings keep working.
+- Installs to `~/.local/share/gnome-shell/extensions/mydock@icyubahiro-jay-p` and enables it for your user. Older installs under the previous ID `mydock@jay-p` are removed automatically and your settings are kept.
 - Turns off **Ubuntu Dock**, **Dash to Dock** and **Dash2Dock Lite** if they are installed, and remembers which ones it turned off.
 - Warns if a minimize-effect extension is enabled (see [Compatibility](#compatibility)).
 - You then log out and back in, because Wayland cannot reload the shell in place.
@@ -106,7 +106,7 @@ To update by hand, rerun the [one-line install](#install-one-line). To turn the 
 Open the settings window:
 
 ```bash
-gnome-extensions prefs mydock@jay-p
+gnome-extensions prefs mydock@icyubahiro-jay-p
 ```
 
 Every setting applies live. Key settings (schema `org.gnome.shell.extensions.mydock`):
@@ -138,7 +138,7 @@ Every setting applies live. Key settings (schema `org.gnome.shell.extensions.myd
 You can also use `gsettings`, for example:
 
 ```bash
-gsettings --schemadir ~/.local/share/gnome-shell/extensions/mydock@jay-p/schemas \
+gsettings --schemadir ~/.local/share/gnome-shell/extensions/mydock@icyubahiro-jay-p/schemas \
   set org.gnome.shell.extensions.mydock minimize-effect 'scale'
 ```
 
@@ -164,7 +164,7 @@ journalctl -f -o cat /usr/bin/gnome-shell
 Turn MY DOCK FINDER FOR LINUX off without uninstalling:
 
 ```bash
-gnome-extensions disable mydock@jay-p
+gnome-extensions disable mydock@icyubahiro-jay-p
 ```
 
 Common issues:
@@ -206,6 +206,17 @@ Bug reports, fixes and themes are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.m
 
 Please do not report security problems in public issues. See [SECURITY.md](SECURITY.md).
 
+## Support this project
+
+MY DOCK FINDER FOR LINUX is free and always will be. If it makes your desktop better and you want to say thanks, you can send any amount with **MTN Mobile Money (MoMo)**:
+
+| | |
+|---|---|
+| Number | **0789124135** |
+| Account name | **Nirere Gaudelive** |
+
+Can't send money? A star on GitHub, a bug report or telling a friend helps just as much.
+
 ## License
 
-[MIT](LICENSE) (c) 2026 Irakoze Icyubahiro Jean Pierre
+[MIT](LICENSE) (c) 2026 Irakoze Icyubahiro Jean Pierre ([@Icyubahiro-Jay-P](https://github.com/Icyubahiro-Jay-P))
