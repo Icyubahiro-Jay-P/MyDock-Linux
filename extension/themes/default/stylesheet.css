@@ -218,18 +218,11 @@
     background-color: #0a84ff;
 }
 
-/* live system stats: icon + value per meter, grouped in one soft rounded capsule */
-#panel.mydock-finderbar .mydock-stats-button {
-    -natural-hpadding: 4px;
+/* live system stats: each meter (icon + value) is its own panel item, no background */
+#panel.mydock-finderbar .mydock-stat-button {
+    -natural-hpadding: 5px;
     -minimum-hpadding: 2px;
 }
-.mydock-stats {
-    spacing: 10px;
-    padding: 2px 10px;
-    border-radius: 9px;
-}
-.mydock-light .mydock-stats { background-color: rgba(0, 0, 0, 0.06); }
-.mydock-dark .mydock-stats { background-color: rgba(255, 255, 255, 0.08); }
 .mydock-stat {
     spacing: 4px;
 }
