@@ -148,12 +148,18 @@ class StatusItem {
         const menu = this.btn.menu;
         menu.actor.add_style_class_name('mydock-menu');
         menu.actor.add_style_class_name('mydock-status-menu');
-        menu.connect('open-state-changed', (_m, open) => {
-            if (open) {
+        // fill right before opening: PopupMenu.open() refuses an empty menu, so building on
+        // open-state-changed would never get there
+        const open = menu.open.bind(menu);
+        menu.open = animate => {
+            if (!menu.isOpen) {
                 this._onOpen?.();
                 this._rebuild();
             }
-            else
+            open(animate);
+        };
+        menu.connect('open-state-changed', (_m, isOpen) => {
+            if (!isOpen)
                 this._run(this._openDrops);
         });
         addButton(role, this.btn);
