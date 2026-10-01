@@ -208,7 +208,9 @@ export function attachTempPopup(menu, tempFile) {
     return {
         destroy() {
             stop();
-            menu.disconnect(openId);
+            try {
+                menu.disconnect(openId);
+            } catch {} // menu already destroyed
             if (alive)
                 item.destroy();
         },
