@@ -31,8 +31,22 @@ export class Launchpad {
         this._ext = ext;
         this._actor = null;
         this._visible = [];
+        Shell.AppSystem.get_default().connectObject('installed-changed', () => (this._appCache = null), this);
         Main.wm.addKeybinding('launchpad-hotkey', ext.settings, Meta.KeyBindingFlags.NONE,
             Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW | Shell.ActionMode.POPUP, () => this.toggle());
+    }
+
+    // Sorted visible apps, cached until the installed set changes (no re-scan on every open).
+    _appList() {
+        if (!this._appCache) {
+            const appSys = Shell.AppSystem.get_default();
+            this._appCache = appSys.get_installed()
+                .filter(info => info.should_show())
+                .map(info => appSys.lookup_app(info.get_id()))
+                .filter(Boolean)
+                .sort((a, b) => a.get_name().localeCompare(b.get_name()));
+        }
+        return this._appCache;
     }
 
     get active() {
@@ -110,12 +124,7 @@ export class Launchpad {
         // icon fills ~60% of the shorter cell side, the label goes under it
         this._iconSize = Math.max(48, Math.min(128, Math.round(Math.min(g.width / COLS, g.height / ROWS) * 0.6)));
 
-        const appSys = Shell.AppSystem.get_default();
-        this._apps = appSys.get_installed()
-            .filter(info => info.should_show())
-            .map(info => appSys.lookup_app(info.get_id()))
-            .filter(Boolean)
-            .sort((a, b) => a.get_name().localeCompare(b.get_name()));
+        this._apps = this._appList();
         this._tiles = new Map(this._apps.map(app => [app, this._buildTile(app)]));
         this._page = 0;
         this._filter();
@@ -330,6 +339,8 @@ export class Launchpad {
     }
 
     destroy() {
+        Shell.AppSystem.get_default().disconnectObject(this);
+        this._appCache = null;
         Main.wm.removeKeybinding('launchpad-hotkey');
         if (this._grab) {
             Main.popModal(this._grab);
