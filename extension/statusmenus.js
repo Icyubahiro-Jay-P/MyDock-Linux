@@ -432,7 +432,7 @@ class BluetoothItem extends StatusItem {
 
     destroy() {
         super.destroy();
-        // GnomeBluetooth.Client may be shared with the shell's indicator: only drop our reference
+        this._client?.run_dispose(); // our own instance (not a singleton): drop its D-Bus objects now
         this._client = null;
         this._rfkill = null;
     }
@@ -908,15 +908,28 @@ class TrayItem {
 
 // ---- Control Center: GNOME quick settings as one icon ----
 
+// QuickSettings indicator properties shown by our own status menus instead
+const DUPLICATE_INDICATORS = ['_network', '_bluetooth', '_volumeOutput', '_system', '_brightness',
+    '_backlight', '_darkMode', '_nightLight', '_powerProfiles', '_rfkill'];
+
 class ControlCenter {
     constructor(ext) {
         const qs = Main.panel.statusArea.quickSettings;
         if (!qs)
             return;
         this._qs = qs;
-        this._indicators = qs._indicators ?? null;
-        this._wasVisible = this._indicators?.visible ?? true;
-        this._indicators?.hide();
+        // detach only the indicators our own menus replace; privacy ones (camera, mic in use,
+        // location, screen sharing) stay. Detached, not hidden: they re-sync their own visibility.
+        const box = qs._indicators;
+        this._detached = [];
+        for (const name of DUPLICATE_INDICATORS) {
+            const actor = qs[name];
+            if (!box || !actor || actor.get_parent() !== box)
+                continue;
+            this._detached.push([actor, box.get_children().indexOf(actor)]);
+            box.remove_child(actor);
+        }
+        this._box = box;
         // optional theme icon, else the stock settings symbol
         const file = Gio.File.new_for_path(`${ext.path}/icons/mydock-control-center-symbolic.svg`);
         this._icon = new St.Icon({
@@ -935,12 +948,14 @@ class ControlCenter {
         if (!this._qs)
             return;
         this._icon.destroy();
-        if (this._indicators)
-            this._indicators.visible = this._wasVisible;
+        // lowest original index first so the indices still line up
+        for (const [actor, index] of this._detached.sort((a, b) => a[1] - b[1]))
+            this._box.insert_child_at_index(actor, Math.min(index, this._box.get_n_children()));
+        this._detached = [];
         this._qs.remove_style_class_name('mydock-control-center-button');
         this._qs.menu.actor.remove_style_class_name('mydock-control-center');
         this._qs = null;
-        this._indicators = null;
+        this._box = null;
     }
 }
 
