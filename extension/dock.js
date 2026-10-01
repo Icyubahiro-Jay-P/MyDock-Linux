@@ -741,7 +741,7 @@ class DockBar {
             this._wallClock.connect('notify::clock', () => {
                 this._calendar?.update();
                 this._clock?.update();
-                if (this._shown === this._month)
+                if (this._month && this._shown === this._month)
                     this._month.refresh();
                 else if (this._shown && this._hoverItem === this._clockItem)
                     this._label.text = this._clockItem.labelText = clockDate();
