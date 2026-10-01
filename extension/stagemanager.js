@@ -16,6 +16,7 @@ const MARGIN = 12;          // gap between strip and screen edge
 const MAX_STACK = 3;        // clones per group
 const ANIM_MS = 220;
 const ICON_SIZE = 28;
+const STACK_INSET = 8;      // padding around the clones inside a group
 
 export class StageManager {
     constructor(ext) {
@@ -31,6 +32,7 @@ export class StageManager {
         this._busy = false;
         this._busyId = 0;
         this._syncId = 0;
+        this._placeLater = 0;
         this._peek = false;
         this._shown = false;
         this._rect = null;
@@ -50,6 +52,8 @@ export class StageManager {
                 this._updateReveal();
             }
         });
+        // center on the real height: the preferred height read in _sync() can be stale
+        this._strip.connect('notify::height', () => this._queuePlace());
         this._stripBox = this._addChrome(this._strip);
         this._stripBox.clip_to_allocation = true;   // slide out into the screen edge
 
@@ -97,7 +101,10 @@ export class StageManager {
             GLib.source_remove(this._syncId);
         if (this._busyId)
             GLib.source_remove(this._busyId);
-        this._syncId = this._busyId = 0;
+        if (this._placeLater)
+            global.compositor.get_laters().remove(this._placeLater);
+        this._syncId = this._busyId = this._placeLater = 0;
+        this._ext.stageOpening?.clear();
 
         // never leave windows hidden once Stage Manager is off
         for (const win of this._ours) {
@@ -181,7 +188,7 @@ export class StageManager {
 
     // Put `app` on stage, minimize every other group. `activate` = user clicked
     // the strip, so also bring its windows back and focus the top one.
-    _arrange(app, activate) {
+    _arrange(app, activate, fromActor = null) {
         this._setBusy();
         this._stage = app;
         this._peek = false;
@@ -189,6 +196,15 @@ export class StageManager {
         const groups = this._groups();
 
         const stageWins = groups.get(app) ?? [];
+        // clicked thumbnail: minimize.js flies these windows out of it instead of the dock genie
+        if (fromActor) {
+            const [x, y] = fromActor.get_transformed_position();
+            const [width, height] = fromActor.get_transformed_size();
+            this._ext.stageOpening ??= new Map();
+            const time = GLib.get_monotonic_time();
+            for (const win of stageWins)
+                this._ext.stageOpening.set(win, {x, y, width, height, time});
+        }
         for (const win of stageWins) {
             // on focus changes only undo our own minimizes, not the user's
             if (win.minimized && (activate || this._ours.has(win)))
@@ -276,15 +292,36 @@ export class StageManager {
 
         if (!mon)
             return;
-        const [, w] = this._strip.get_preferred_width(-1);
-        const [, h] = this._strip.get_preferred_height(w);
-        const x = mon.x + MARGIN;
-        const y = mon.y + Math.max(MARGIN, Math.floor((mon.height - h) / 2));
-        this._stripBox.set_position(x, y);
-        this._rect = {x: mon.x, y, width: w + 2 * MARGIN, height: h};
+        this._place();
         this._edgeBox.set_position(mon.x, mon.y);
         this._edge.height = mon.height;
         this._updateReveal();
+    }
+
+    // Vertically center the strip on the primary monitor, from its allocated size once known.
+    _place() {
+        const mon = Main.layoutManager.primaryMonitor;
+        if (!mon || !this._strip)
+            return;
+        let [w, h] = this._strip.get_size();
+        if (!h) {
+            [, w] = this._strip.get_preferred_width(-1);
+            [, h] = this._strip.get_preferred_height(w);
+        }
+        const y = mon.y + Math.max(MARGIN, Math.floor((mon.height - h) / 2));
+        this._stripBox.set_position(mon.x + MARGIN, y);
+        this._rect = {x: mon.x, y, width: w + 2 * MARGIN, height: h};
+    }
+
+    // notify::height fires during allocation; move the parent after layout, not inside it
+    _queuePlace() {
+        if (this._placeLater)
+            return;
+        this._placeLater = global.compositor.get_laters().add(Meta.LaterType.BEFORE_REDRAW, () => {
+            this._placeLater = 0;
+            this._place();
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     _buildGroup(app, wins) {
@@ -315,8 +352,8 @@ export class StageManager {
                 source: actor,
                 width: cw,
                 height: ch,
-                x: depth * 6,
-                y: depth * 5,
+                x: STACK_INSET + depth * 6,
+                y: STACK_INSET + depth * 5,
                 pivot_point: new Graphene.Point({x: 0.5, y: 0.5}),
                 rotation_angle_y: 14,
                 rotation_angle_z: depth * -3,
@@ -325,7 +362,8 @@ export class StageManager {
             stack.add_child(clone);
             stackH = Math.max(stackH, ch + depth * 5);
         });
-        stack.set_size(size + 12, stackH);
+        // room for the y-rotation perspective and the hover zoom so clones stay inside the group
+        stack.set_size(size + 12 + 2 * STACK_INSET, stackH + 2 * STACK_INSET);
         box.add_child(stack);
 
         const row = new St.BoxLayout({style_class: 'mydock-stage-label-row', x_align: Clutter.ActorAlign.CENTER});
@@ -355,7 +393,7 @@ export class StageManager {
             });
         });
         stack.set_pivot_point(0.5, 0.5);
-        button.connect('clicked', () => this._arrange(app, true));
+        button.connect('clicked', () => this._arrange(app, true, stack));
         return button;
     }
 
