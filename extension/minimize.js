@@ -8,6 +8,7 @@
 // so completed_minimize/unminimize runs exactly once and 'kill-window-effects' keeps working.
 
 import Clutter from 'gi://Clutter';
+import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
@@ -20,6 +21,8 @@ const EFFECT_NAME = 'mydock-minimize';
 const TILES = 20;       // mesh resolution for big windows
 const TILE_PX = 48;     // smaller windows get ~one tile per 48px (min 8): same curve, fewer vertex calls
 const VERTEX = {genie: genieVertex, suck: suckVertex};
+const STAGE_MS = 380;       // Stage Manager fly-out (fixed: it is not the user's minimize effect)
+const STAGE_MAX_AGE = 2e6;  // us a recorded thumbnail rect stays valid for
 
 const DeformEffect = GObject.registerClass(
 class MyDockDeformEffect extends Clutter.DeformEffect {
@@ -91,7 +94,11 @@ export class MinimizeEffects {
         // a new request on the same window ends the running one first
         this._active.get(actor)?.();
 
-        const effect = this._ext.settings.get_string('minimize-effect');
+        let effect = this._ext.settings.get_string('minimize-effect');
+        // window opened from a Stage Manager thumbnail: its own fly-out, not the dock effect
+        const stage = minimizing ? null : this._stageRect(actor.meta_window);
+        if (stage)
+            effect = 'stage';
         if (effect === 'none' || !St.Settings.get().enable_animations ||
             Main.wm._getAnimationWindowType(actor) !== Meta.WindowType.NORMAL) {
             if (minimizing)
@@ -113,14 +120,14 @@ export class MinimizeEffects {
         }
 
         try {
-            this._animate(shellwm, actor, minimizing, effect);
+            this._animate(shellwm, actor, minimizing, effect, stage);
         } catch (e) {
             logError(e, 'MyDock: minimize effect failed');
             this._active.get(actor)?.();
         }
     }
 
-    _animate(shellwm, actor, minimizing, effect) {
+    _animate(shellwm, actor, minimizing, effect, stageRect = null) {
         // register first so any later failure still ends in exactly one completed_*
         (minimizing ? Main.wm._minimizing : Main.wm._unminimizing).add(actor);
         let timeline = null;
@@ -136,6 +143,7 @@ export class MinimizeEffects {
                 actor.disconnect(destroyId);
             actor.remove_effect_by_name(EFFECT_NAME);
             actor.set_translation(0, 0, 0);
+            actor.rotation_angle_y = 0;
             // resets transitions, scale, opacity, pivot and calls completed_* once
             if (minimizing)
                 Main.wm._minimizeWindowDone(shellwm, actor);
@@ -151,11 +159,29 @@ export class MinimizeEffects {
         if (!minimizing)
             actor.set_position(buf.x, buf.y);
         const [w, h] = actor.get_size();
-        const r = this._targetRect(actor);
+        const r = stageRect ?? this._targetRect(actor);
         const target = {x: r.x - buf.x, y: r.y - buf.y, width: r.width, height: r.height};
         const duration = this._ext.settings.get_int('minimize-duration');
 
         actor.set_pivot_point(0, 0);
+        if (effect === 'stage') {
+            // start as the tilted thumbnail and spring out to the window with a slight overshoot
+            actor.set({
+                scale_x: w ? target.width / w : 0,
+                scale_y: h ? target.height / h : 0,
+                translation_x: target.x,
+                translation_y: target.y,
+                rotation_angle_y: 14,
+                opacity: 160,
+            });
+            actor.ease({
+                scale_x: 1, scale_y: 1, translation_x: 0, translation_y: 0, rotation_angle_y: 0, opacity: 255,
+                duration: STAGE_MS,
+                mode: Clutter.AnimationMode.EASE_OUT_BACK,
+                onStopped: finish,
+            });
+            return;
+        }
         if (effect === 'scale') {
             const shrunk = {
                 scale_x: w ? target.width / w : 0,
@@ -192,6 +218,18 @@ export class MinimizeEffects {
         timeline.connect('new-frame', step);
         timeline.connect('completed', finish);
         timeline.start();
+    }
+
+    // Thumbnail rect Stage Manager recorded for this window (consumed), else null.
+    _stageRect(win) {
+        const map = this._ext.stageOpening;
+        const r = map?.get(win);
+        if (!r)
+            return null;
+        map.delete(win);
+        if (GLib.get_monotonic_time() - r.time > STAGE_MAX_AGE)
+            return null;
+        return r;
     }
 
     // Stage-space rect the window flies into: dock icon, else Meta icon geometry,
