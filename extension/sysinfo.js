@@ -16,7 +16,7 @@ export function cpuUsage(prev, cur) {
     return Math.min(100, Math.max(0, 100 * (1 - (cur.idle - prev.idle) / dt)));
 }
 
-// [[label text|null, temp*_input text|null], ...] -> [['Core 0', '46°'], ...]; unreadable inputs are skipped
+// [[label text|null, temp*_input text|null], ...] -> [['Core 0', '46°'], ...], package last; unreadable inputs are skipped
 export function parseSensors(entries) {
     const rows = [];
     entries.forEach(([label, input], i) => {
@@ -25,7 +25,7 @@ export function parseSensors(entries) {
             return;
         rows.push([label?.trim() || `Sensor ${i + 1}`, `${Math.round(milli / 1000)}°`]);
     });
-    return rows;
+    return rows.sort((x, y) => /^Package/.test(x[0]) - /^Package/.test(y[0]));
 }
 
 export function parseCpuModel(cpuinfo) {
