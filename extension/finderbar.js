@@ -286,113 +286,142 @@ export class FinderBar {
     }
 
     // ---- right: live system stats (CPU, temperature, memory, disk, network) ----
+    // every stat is its own panel item (role mydock-stat-<key>), so Ctrl + drag moves each one
 
+    // finderbar-stats toggled / startup: (re)build every stat, the queued _applyOrder restores
+    // the saved order. Reverse so the default placement (index 0 of the right box) reads cpu..net.
     _syncStats() {
-        const on = this._settings.get_boolean('finderbar-stats');
-        if (on && !this._statsButton)
-            this._buildStats();
-        else if (!on && this._statsButton)
-            this._destroyStats();
+        if (!Object.keys(this._statBtn).length) {
+            // nothing built: re-probe what the system can provide
+            this._tempFile = findTempFile();
+            this._statOk = {cpu: true, temp: !!this._tempFile, mem: true, disk: true, net: true};
+        }
+        for (const [key] of [...STATS].reverse())
+            this._syncStat(key, true);
     }
 
-    _buildStats() {
-        const btn = new PanelMenu.Button(0.0, 'System Stats', true);
-        btn.add_style_class_name('mydock-stats-button');
-        const box = new St.BoxLayout({style_class: 'mydock-stats', y_align: Clutter.ActorAlign.CENTER});
-        this._stat = {};
-        this._statCell = {};
-        this._statOk = {};
-        for (const [key, icon] of STATS) {
-            const cell = new St.BoxLayout({style_class: 'mydock-stat', y_align: Clutter.ActorAlign.CENTER});
-            const file = Gio.File.new_for_path(`${this._ext.path}/icons/mydock-${icon}-symbolic.svg`);
-            cell.add_child(new St.Icon({
-                gicon: new Gio.FileIcon({file}),
-                style_class: 'mydock-stat-icon',
-                y_align: Clutter.ActorAlign.CENTER,
-            }));
-            const value = new St.Label({
-                style_class: key === 'net' ? 'mydock-stat-value mydock-stat-net' : 'mydock-stat-value',
-                y_align: Clutter.ActorAlign.CENTER,
-            });
-            cell.add_child(value);
-            box.add_child(cell);
-            this._stat[key] = value;
-            this._statCell[key] = cell;
-            this._statOk[key] = true;
-            this._statSigs ??= [];
-            this._statSigs.push(this._settings.connect(`changed::stats-${key}`, () => this._syncStatCells()));
-        }
-        btn.add_child(box);
-        this._statsButton = btn;
-        this._tempFile = findTempFile();
-        this._statOk.temp = !!this._tempFile;
-        this._prevCpu = null;
-        this._prevNet = null;
-        this._statTick = 0;
-        this._syncStatCells();
-        Main.panel.addToStatusArea('mydock-stats', btn, 0, 'right');
-        this._updateStats();
-        this._statsId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, STATS_SECONDS, () => {
-            this._updateStats();
-            return GLib.SOURCE_CONTINUE;
+    // a stat exists only while it is switched on and the system can provide it
+    _syncStat(key, initial = false) {
+        const on = this._settings.get_boolean('finderbar-stats') &&
+            this._settings.get_boolean(`stats-${key}`) && this._statOk[key];
+        if (on && !this._statBtn[key])
+            this._buildStat(key, initial);
+        else if (!on && this._statBtn[key])
+            this._destroyStat(key);
+    }
+
+    _buildStat(key, initial) {
+        const [, icon, name] = STATS.find(s => s[0] === key);
+        const btn = new PanelMenu.Button(0.0, name, true);
+        btn.add_style_class_name('mydock-stat-button');
+        const cell = new St.BoxLayout({style_class: 'mydock-stat', y_align: Clutter.ActorAlign.CENTER});
+        const file = Gio.File.new_for_path(`${this._ext.path}/icons/mydock-${icon}-symbolic.svg`);
+        cell.add_child(new St.Icon({
+            gicon: new Gio.FileIcon({file}),
+            style_class: 'mydock-stat-icon',
+            y_align: Clutter.ActorAlign.CENTER,
+        }));
+        const value = new St.Label({
+            style_class: key === 'net' ? 'mydock-stat-value mydock-stat-net' : 'mydock-stat-value',
+            y_align: Clutter.ActorAlign.CENTER,
         });
-    }
+        cell.add_child(value);
+        btn.add_child(cell);
+        this._statBtn[key] = btn;
+        this._stat[key] = value;
 
-    // each stat has its own on/off key; a stat the system can't provide stays hidden
-    _syncStatCells() {
-        let any = false;
-        for (const [key] of STATS) {
-            const on = this._settings.get_boolean(`stats-${key}`) && this._statOk[key];
-            this._statCell[key].visible = on;
-            any ||= on;
+        const first = initial ? null : this._firstStat();
+        Main.panel.addToStatusArea(`mydock-stat-${key}`, btn, 0, 'right');
+        if (!initial) {
+            // switched on by the user: goes left of the other stats, and is saved there so a
+            // stale finderbar-order entry can't pull it back
+            if (first) {
+                const box = first.get_parent();
+                this._applying = true;
+                btn.container.get_parent()?.remove_child(btn.container);
+                box.insert_child_at_index(btn.container, box.get_children().indexOf(first));
+                this._applying = false;
+            }
+            this._saveOrder();
         }
-        this._statsButton.visible = any;
+
+        if (key === 'disk')
+            this._statTick = 0; // read it on the next update
+        if (!this._statsId) {
+            this._statTick = 0;
+            this._statsId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, STATS_SECONDS, () => {
+                this._updateStats();
+                return GLib.SOURCE_CONTINUE;
+            });
+        }
+        this._updateStats();
     }
 
-    _destroyStats() {
-        if (this._statsId) {
+    // leftmost stat container in the bar (left, center, right box order)
+    _firstStat() {
+        for (const box of Object.values(this._boxes)) {
+            const kid = box.get_children().find(k => this._roleOf(k)?.startsWith('mydock-stat-'));
+            if (kid)
+                return kid;
+        }
+        return null;
+    }
+
+    _destroyStat(key) {
+        this._statBtn[key].destroy(); // the panel drops statusArea[role] on destroy
+        delete this._statBtn[key];
+        delete this._stat[key];
+        if (!Object.keys(this._statBtn).length && this._statsId) {
             GLib.source_remove(this._statsId);
             this._statsId = 0;
         }
-        for (const id of this._statSigs ?? [])
-            this._settings.disconnect(id);
-        this._statSigs = null;
-        this._statsButton?.destroy();
-        this._statsButton = null;
-        this._stat = this._statCell = null;
+    }
+
+    _destroyStats() {
+        for (const key of Object.keys(this._statBtn))
+            this._destroyStat(key);
     }
 
     _updateStats() {
-        // nobody can see it (locked, fullscreen, panel hidden): skip the /proc reads
-        if (!this._statsButton.mapped)
-            return;
-        const cpu = readCpu();
-        if (cpu && this._prevCpu) {
-            const total = cpu.total - this._prevCpu.total;
-            const busy = total - (cpu.idle - this._prevCpu.idle);
-            this._stat.cpu.text = `${total > 0 ? Math.round(100 * busy / total) : 0}%`;
+        // read only stats on screen (not when locked, fullscreen, panel hidden); a stat not read
+        // drops its previous sample so a stale delta is never used later
+        const shown = key => !!this._statBtn[key]?.mapped;
+        if (shown('cpu')) {
+            const cpu = readCpu();
+            if (cpu && this._prevCpu) {
+                const total = cpu.total - this._prevCpu.total;
+                const busy = total - (cpu.idle - this._prevCpu.idle);
+                this._stat.cpu.text = `${total > 0 ? Math.round(100 * busy / total) : 0}%`;
+            }
+            this._prevCpu = cpu;
+        } else {
+            this._prevCpu = null;
         }
-        this._prevCpu = cpu;
 
-        const temp = this._tempFile ? parseInt(readText(this._tempFile)) : NaN;
-        if (this._statOk.temp === isNaN(temp)) {
-            this._statOk.temp = !isNaN(temp);
-            this._syncStatCells();
+        if (shown('temp')) {
+            const temp = parseInt(readText(this._tempFile));
+            if (isNaN(temp)) {
+                this._statOk.temp = false;
+                this._syncStat('temp');
+            } else {
+                this._stat.temp.text = `${Math.round(temp / 1000)}°`;
+            }
         }
-        this._stat.temp.text = `${Math.round(temp / 1000)}\u00b0`;
 
-        const mem = readText('/proc/meminfo');
-        const kb = name => parseInt(mem?.match(new RegExp(`^${name}:\\s+(\\d+)`, 'm'))?.[1] ?? '0');
-        const total = kb('MemTotal');
-        this._stat.mem.text = total ? `${Math.round(100 * (total - kb('MemAvailable')) / total)}%` : '';
+        if (shown('mem')) {
+            const mem = readText('/proc/meminfo');
+            const total = parseInt(mem?.match(MEM_TOTAL_RE)?.[1] ?? '0');
+            const avail = parseInt(mem?.match(MEM_AVAIL_RE)?.[1] ?? '0');
+            this._stat.mem.text = total ? `${Math.round(100 * (total - avail) / total)}%` : '';
+        }
 
         // disk usage changes slowly: every 15th tick (~30 s); async so a slow statfs never
         // stalls the compositor
-        if (this._statTick++ % 15 === 0) {
+        if (shown('disk') && this._statTick++ % 15 === 0) {
             Gio.File.new_for_path('/').query_filesystem_info_async('filesystem::size,filesystem::free',
                 GLib.PRIORITY_LOW, null, (f, res) => {
-                    if (!this._stat)
-                        return; // stats turned off / destroyed meanwhile
+                    if (!this._stat?.disk)
+                        return; // disk stat turned off / destroyed meanwhile
                     try {
                         const info = f.query_filesystem_info_finish(res);
                         const size = info.get_attribute_uint64('filesystem::size');
@@ -400,19 +429,23 @@ export class FinderBar {
                         this._stat.disk.text = size ? `${Math.round(100 * (size - free) / size)}%` : '';
                     } catch {
                         this._statOk.disk = false;
-                        this._syncStatCells();
+                        this._syncStat('disk');
                     }
                 });
         }
 
-        const net = readNet();
-        const now = GLib.get_monotonic_time();
-        if (net && this._prevNet) {
-            const dt = (now - this._prevNet.time) / 1e6;
-            const up = (net.tx - this._prevNet.tx) / dt, down = (net.rx - this._prevNet.rx) / dt;
-            this._stat.net.text = `${formatRate(up)}\n${formatRate(down)}`;
+        if (shown('net')) {
+            const net = readNet();
+            const now = GLib.get_monotonic_time();
+            if (net && this._prevNet) {
+                const dt = (now - this._prevNet.time) / 1e6;
+                const up = (net.tx - this._prevNet.tx) / dt, down = (net.rx - this._prevNet.rx) / dt;
+                this._stat.net.text = `${formatRate(up)}\n${formatRate(down)}`;
+            }
+            this._prevNet = net ? {...net, time: now} : null;
+        } else {
+            this._prevNet = null;
         }
-        this._prevNet = net ? {...net, time: now} : null;
     }
 
     // ---- layout / blur ----
