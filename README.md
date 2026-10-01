@@ -121,6 +121,7 @@ Every setting applies live. Key settings (schema `org.gnome.shell.extensions.myd
 | Dock | `blur` / `opacity` | `15` / `45` | Background blur radius and opacity (%) |
 | Dock | `show-trash`, `show-calendar`, `show-clock`, `show-launchpad` | on, on, off, on | Extra dock icons |
 | Finder bar | `finderbar-enabled` | `true` | macOS-style top bar |
+| Finder bar | `finderbar-status-menus` | `true` | Wi-Fi, Bluetooth, sound, display, battery, account menus and a Control Center in the Finder bar |
 | Finder bar | `time-format` | `'%a %-d %b  %-I:%M %p'` | Clock format (GLib strftime) |
 | Finder bar | `logo-path` | `''` | Custom top-left logo image (empty = distributor logo) |
 | Launchpad | `launchpad-hotkey` | `['<Control><Super>a']` | Launchpad shortcut |
