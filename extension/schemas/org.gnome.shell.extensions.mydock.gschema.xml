@@ -32,6 +32,11 @@
     <key name="time-format" type="s"><default>'%a %-d %b  %-I:%M %p'</default><summary>Top bar clock format (GLib strftime)</summary></key>
     <key name="logo-path" type="s"><default>''</default><summary>Custom logo image for the top-left menu (empty = distributor logo icon)</summary></key>
     <key name="finderbar-stats" type="b"><default>true</default><summary>Show CPU, temperature, memory, disk and network in the top bar</summary></key>
+    <key name="stats-cpu" type="b"><default>true</default><summary>Show CPU usage</summary></key>
+    <key name="stats-temp" type="b"><default>true</default><summary>Show CPU temperature</summary></key>
+    <key name="stats-mem" type="b"><default>true</default><summary>Show memory usage</summary></key>
+    <key name="stats-disk" type="b"><default>true</default><summary>Show disk usage</summary></key>
+    <key name="stats-net" type="b"><default>true</default><summary>Show network speed</summary></key>
     <key name="finderbar-order" type="as"><default>[]</default><summary>Top bar item order as box:role entries (internal)</summary></key>
     <!-- Windows -->
     <key name="window-buttons-left" type="b"><default>true</default><summary>Window buttons on the left, macOS order (close, minimize, maximize)</summary></key>
