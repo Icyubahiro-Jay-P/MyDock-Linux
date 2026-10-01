@@ -9,8 +9,8 @@
   border: 1px solid rgba(255, 255, 255, 0.6);
 }
 .mydock-dark .mydock-bg {
-  background-color: rgb(20, 20, 22);
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  background-color: rgb(14, 14, 16);
+  border: 1px solid rgba(255, 255, 255, 0.28);
 }
 
 /* hidden-dock pill: shown at the bottom while the dock is auto-hidden, hover reveals the dock */
@@ -34,35 +34,46 @@
 .mydock-dark .mydock-item { color: #f2f2f7; }
 
 .mydock-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 3px;
-  background-color: rgba(0, 0, 0, 0.75);
+  width: 4px;
+  height: 4px;
+  border-radius: 2px;
+  background-color: rgba(0, 0, 0, 0.7);
 }
-.mydock-dark .mydock-dot { background-color: rgba(255, 255, 255, 0.85); }
+.mydock-dark .mydock-dot { background-color: rgba(255, 255, 255, 0.8); }
+/* focused app: the dot stretches into a short underline bar (dock.js toggles the class) */
+.mydock-dot.mydock-dot-focused {
+  width: 26px;
+  height: 3px;
+  border-radius: 2px;
+  background-color: rgba(0, 0, 0, 0.8);
+}
+.mydock-dark .mydock-dot.mydock-dot-focused { background-color: rgba(255, 255, 255, 0.92); }
 
 .mydock-separator {
   width: 1px;
   margin: 0 4px;
-  background-color: rgba(0, 0, 0, 0.25);
+  background-color: rgba(0, 0, 0, 0.22);
 }
-.mydock-dark .mydock-separator { background-color: rgba(255, 255, 255, 0.3); }
+.mydock-dark .mydock-separator { background-color: rgba(255, 255, 255, 0.28); }
 /* user separators (drag to move): highlight the line on hover */
 .mydock-user-separator:hover .mydock-separator { background-color: rgba(0, 0, 0, 0.55); }
 .mydock-dark .mydock-user-separator:hover .mydock-separator { background-color: rgba(255, 255, 255, 0.7); }
 
 .mydock-label {
-  padding: 4px 10px;
-  border-radius: 8px;
-  font-size: 10.5pt;
+  padding: 4px 12px;
+  border-radius: 7px;
+  font-size: 10pt;
+  font-weight: bold;
   color: #1c1c1e;
-  background-color: rgba(240, 240, 242, 0.95);
+  background-color: rgba(240, 240, 242, 0.96);
   border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
 }
 .mydock-dark .mydock-label {
-  color: #f2f2f7;
-  background-color: rgba(44, 44, 48, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #f5f5f7;
+  background-color: rgba(38, 38, 40, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
 /* Live calendar icon: blue month band over a white body (sizes and radii are inline). */
@@ -85,38 +96,49 @@
 }
 
 /* down arrow under the hover label: `color` is the fill, matching the label background */
-.mydock-label-arrow { color: rgba(240, 240, 242, 0.95); }
-.mydock-dark .mydock-label-arrow { color: rgba(44, 44, 48, 0.95); }
+.mydock-label-arrow { color: rgba(240, 240, 242, 0.96); }
+.mydock-dark .mydock-label-arrow { color: rgba(38, 38, 40, 0.96); }
 
-/* month calendar popup above the calendar tile (calendar.js) */
+/* month calendar popup above the calendar tile (calendar.js): smoked glass over the wallpaper */
 .mydock-month {
-  padding: 14px 16px 16px 16px;
-  spacing: 12px;
-  border-radius: 14px;
-  background-color: rgba(30, 30, 32, 0.88);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 16px 18px 20px 18px;
+  spacing: 14px;
+  border-radius: 12px;
+  background-gradient-direction: vertical;
+  background-gradient-start: rgba(52, 48, 45, 0.82);
+  background-gradient-end: rgba(30, 28, 27, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   color: #ffffff;
   font-weight: bold;
 }
 .mydock-month-header {
-  font-size: 11pt;
-  padding-left: 4px;
+  font-size: 10.5pt;
+  padding-left: 2px;
 }
 .mydock-month-cell {
   width: 30px;
   height: 30px;
   border-radius: 15px;
-  font-size: 10pt;
+  font-size: 9.5pt;
 }
 .mydock-month-weekday { font-size: 9.5pt; }
-.mydock-month-today { background-color: rgba(255, 255, 255, 0.35); }
+.mydock-month-today {
+  color: #1c1c1e;
+  background-color: rgba(220, 220, 222, 0.92);
+}
 
 .mydock-light .mydock-month {
-  background-color: rgba(246, 246, 248, 0.92);
+  background-gradient-start: rgba(250, 250, 252, 0.9);
+  background-gradient-end: rgba(236, 236, 240, 0.92);
   border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
   color: #1c1c1e;
 }
-.mydock-light .mydock-month-today { background-color: rgba(0, 0, 0, 0.15); }
+.mydock-light .mydock-month-today {
+  color: #ffffff;
+  background-color: rgba(60, 60, 64, 0.85);
+}
 
 /* download / task progress in the dot row (Unity LauncherEntry) */
 .mydock-progress {
@@ -199,7 +221,7 @@
 }
 .mydock-dark #panel.mydock-finderbar,
 .mydock-dark #panel.mydock-finderbar:overview {
-    background-color: rgb(34, 34, 36);
+    background-color: rgb(14, 14, 15);
 }
 
 /* translucent over the Shell.BlurEffect (finderbar-blur on); overview keeps a tint so text stays readable */
@@ -209,7 +231,7 @@
 }
 .mydock-dark #panel.mydock-finderbar.mydock-finderbar-blur,
 .mydock-dark #panel.mydock-finderbar.mydock-finderbar-blur:overview {
-    background-color: rgba(28, 28, 30, 0.5);
+    background-color: rgba(8, 8, 10, 0.55);
 }
 
 /* text + icon colors */
@@ -224,20 +246,40 @@
     color: #f5f5f7;
 }
 
-#panel.mydock-finderbar .panel-button {
-    border-radius: 9px;
-    transition-duration: 150ms;
+/* grey rounded-rect highlight like the reference, not the shell theme's pill. Shell themes
+   (Yaru, default) paint hover as an inset box-shadow, so that is cleared here too. */
+#panel.mydock-finderbar .panel-button,
+#panel.mydock-finderbar .panel-button.clock-display .clock {
+    border-radius: 5px;
+    box-shadow: none;
+    transition-duration: 120ms;
 }
 
 .mydock-light #panel.mydock-finderbar .panel-button:hover,
+.mydock-light #panel.mydock-finderbar .panel-button:focus,
 .mydock-light #panel.mydock-finderbar .panel-button:active,
 .mydock-light #panel.mydock-finderbar .panel-button:checked {
+    box-shadow: none;
     background-color: rgba(0, 0, 0, 0.1);
 }
 .mydock-dark #panel.mydock-finderbar .panel-button:hover,
+.mydock-dark #panel.mydock-finderbar .panel-button:focus,
 .mydock-dark #panel.mydock-finderbar .panel-button:active,
 .mydock-dark #panel.mydock-finderbar .panel-button:checked {
-    background-color: rgba(255, 255, 255, 0.15);
+    box-shadow: none;
+    background-color: rgba(255, 255, 255, 0.18);
+}
+/* the clock button keeps its own background off (shell themes force it), so its label lights up */
+.mydock-light #panel.mydock-finderbar .panel-button.clock-display:hover .clock,
+.mydock-light #panel.mydock-finderbar .panel-button.clock-display:checked .clock {
+    box-shadow: inset 0 0 0 100px rgba(0, 0, 0, 0.1);
+}
+.mydock-dark #panel.mydock-finderbar .panel-button.clock-display:hover .clock,
+.mydock-dark #panel.mydock-finderbar .panel-button.clock-display:checked .clock {
+    box-shadow: inset 0 0 0 100px rgba(255, 255, 255, 0.18);
+}
+#panel.mydock-finderbar .mydock-clock {
+    padding: 0 6px;
 }
 
 /* logo */
@@ -354,32 +396,53 @@
 /* ---- finder menus: .mydock-menu sits on every finder menu actor plus GNOME's dateMenu and
    quickSettings menus. Dark by default, light under .mydock-light (on Main.uiGroup). ---- */
 .mydock-menu .popup-menu-content {
-    padding: 5px 0;
+    padding: 6px 0;
     border-radius: 8px;
     font-weight: bold;
     color: #f5f5f7;
-    background-color: rgba(30, 30, 32, 0.96);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+    background-color: rgba(32, 32, 33, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
+/* 5px margin + 9px padding puts the text 14px in from the panel edge */
 .mydock-menu .popup-menu-item {
     margin: 0 5px;
-    padding: 4px 10px;
-    border-radius: 5px;
-    spacing: 6px;
+    padding: 4px 9px;
+    border-radius: 4px;
+    spacing: 8px;
     font-weight: bold;
     color: #f5f5f7;
+    background-color: transparent;
+    box-shadow: none;
 }
+/* grey row highlight like the reference (shell themes would use their accent) */
 .mydock-menu .popup-menu-item:hover,
 .mydock-menu .popup-menu-item:focus,
 .mydock-menu .popup-menu-item:active,
 .mydock-menu .popup-menu-item:checked:hover,
 .mydock-menu .popup-menu-item:checked:focus {
     color: #ffffff;
-    background-color: #1c5bd0;
+    background-color: rgba(255, 255, 255, 0.13);
+    box-shadow: none;
+}
+.mydock-menu .popup-menu-item:active {
+    background-color: rgba(255, 255, 255, 0.2);
 }
 .mydock-menu .popup-menu-item:insensitive {
-    color: rgba(245, 245, 247, 0.4);
+    color: rgba(245, 245, 247, 0.38);
+    background-color: transparent;
+}
+.mydock-menu .popup-menu-arrow {
+    icon-size: 12px;
+}
+/* toggle switch: blue pill with a grey knob, as in the reference (SVGs next to this file) */
+.mydock-menu .toggle-switch {
+    width: 40px;
+    height: 22px;
+    background-image: url("toggle-off.svg");
+}
+.mydock-menu .toggle-switch:checked {
+    background-image: url("toggle-on.svg");
 }
 .mydock-menu .popup-menu-item:hover .popup-menu-icon,
 .mydock-menu .popup-menu-item:focus .popup-menu-icon,
@@ -393,19 +456,20 @@
     margin: 0 5px;
 }
 .mydock-menu .popup-separator-menu-item {
-    padding: 3px 0;
-    margin: 0 12px;
+    padding: 4px 0;
+    margin: 0 14px;
+    background-color: transparent;
 }
 .mydock-menu .popup-separator-menu-item-separator {
     height: 1px;
-    background-color: rgba(255, 255, 255, 0.15);
+    background-color: rgba(255, 255, 255, 0.14);
 }
 
 .mydock-light .mydock-menu .popup-menu-content {
     color: #1d1d1f;
     background-color: rgba(246, 246, 248, 0.96);
-    border: 1px solid rgba(0, 0, 0, 0.15);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+    border: 1px solid rgba(0, 0, 0, 0.14);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 }
 .mydock-light .mydock-menu .popup-menu-item {
     color: #1d1d1f;
@@ -415,8 +479,11 @@
 .mydock-light .mydock-menu .popup-menu-item:active,
 .mydock-light .mydock-menu .popup-menu-item:checked:hover,
 .mydock-light .mydock-menu .popup-menu-item:checked:focus {
-    color: #ffffff;
-    background-color: #1c5bd0;
+    color: #000000;
+    background-color: rgba(0, 0, 0, 0.08);
+}
+.mydock-light .mydock-menu .popup-menu-item:active {
+    background-color: rgba(0, 0, 0, 0.14);
 }
 .mydock-light .mydock-menu .popup-menu-item:insensitive {
     color: rgba(29, 29, 31, 0.4);
@@ -425,26 +492,43 @@
     background-color: rgba(0, 0, 0, 0.04);
 }
 .mydock-light .mydock-menu .popup-separator-menu-item-separator {
-    background-color: rgba(0, 0, 0, 0.15);
+    background-color: rgba(0, 0, 0, 0.12);
+}
+.mydock-light .mydock-menu .toggle-switch {
+    background-image: url("toggle-off-light.svg");
+}
+.mydock-light .mydock-menu .toggle-switch:checked {
+    background-image: url("toggle-on.svg");
 }
 
-/* ---- clock popup (GNOME dateMenu): compact month calendar, grey circle on today ---- */
+/* ---- clock popup (GNOME dateMenu): compact month calendar, grey circle on today.
+   Selectors repeat .calendar to outrank the shell theme's `.calendar .calendar-day` rules. ---- */
 .mydock-menu .calendar {
     margin: 0;
-    padding: 4px;
+    padding: 6px 4px;
     background-color: transparent;
     border: none;
     box-shadow: none;
 }
-.mydock-menu .calendar-month-label {
+.mydock-menu .calendar .calendar-month-label {
+    font-size: 10.5pt;
     font-weight: bold;
+    background-color: transparent;
 }
-.mydock-menu .calendar-day-heading {
-    font-size: 8.5pt;
+.mydock-menu .calendar .pager-button {
+    border-radius: 6px;
+    background-color: transparent;
+}
+.mydock-menu .calendar .pager-button:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+.mydock-menu .calendar .calendar-day-heading {
+    font-size: 9.5pt;
     font-weight: bold;
-    color: rgba(245, 245, 247, 0.7);
+    color: #f5f5f7;
+    background-color: transparent;
 }
-.mydock-menu .calendar-day {
+.mydock-menu .calendar .calendar-day {
     width: 30px;
     height: 30px;
     padding: 0;
@@ -454,26 +538,39 @@
     color: #f5f5f7;
     background-color: transparent;
 }
-.mydock-menu .calendar-day:hover,
-.mydock-menu .calendar-day:focus {
+.mydock-menu .calendar .calendar-day:hover,
+.mydock-menu .calendar .calendar-day:focus {
     background-color: rgba(255, 255, 255, 0.12);
 }
-.mydock-menu .calendar-other-month {
+.mydock-menu .calendar .calendar-day.calendar-other-month {
     color: rgba(245, 245, 247, 0.3);
 }
-.mydock-menu .calendar-today,
-.mydock-menu .calendar-today:hover,
-.mydock-menu .calendar-today:focus,
-.mydock-menu .calendar-today:selected {
-    color: #ffffff;
-    background-color: rgba(255, 255, 255, 0.35);
+.mydock-menu .calendar .calendar-day.calendar-weekend {
+    color: rgba(245, 245, 247, 0.85);
+}
+.mydock-menu .calendar .calendar-day.calendar-today,
+.mydock-menu .calendar .calendar-day.calendar-today:hover,
+.mydock-menu .calendar .calendar-day.calendar-today:focus,
+.mydock-menu .calendar .calendar-day.calendar-today:selected {
+    color: #1c1c1e !important;
+    background-color: rgba(220, 220, 222, 0.92);
+    box-shadow: none;
 }
 .mydock-menu .datemenu-today-button,
 .mydock-menu .events-button,
 .mydock-menu .world-clocks-button,
 .mydock-menu .weather-button {
-    border-radius: 6px;
+    border-radius: 8px;
     background-color: transparent;
+    border: none;
+    box-shadow: none;
+}
+.mydock-menu .datemenu-today-button .day-label {
+    font-weight: bold;
+}
+.mydock-menu .datemenu-today-button .date-label {
+    font-size: 11pt;
+    font-weight: bold;
 }
 .mydock-menu .datemenu-today-button:hover,
 .mydock-menu .events-button:hover,
@@ -481,26 +578,33 @@
 .mydock-menu .weather-button:hover {
     background-color: rgba(255, 255, 255, 0.08);
 }
-
-.mydock-light .mydock-menu .calendar-day-heading {
-    color: rgba(29, 29, 31, 0.7);
+/* clock popup panel: a little roomier and rounder than the plain menus, like the reference */
+.mydock-menu .datemenu-popover {
+    padding: 10px 6px;
+    border-radius: 12px;
 }
-.mydock-light .mydock-menu .calendar-day {
+
+.mydock-light .mydock-menu .calendar .calendar-day-heading,
+.mydock-light .mydock-menu .calendar .calendar-day {
     color: #1d1d1f;
 }
-.mydock-light .mydock-menu .calendar-day:hover,
-.mydock-light .mydock-menu .calendar-day:focus {
+.mydock-light .mydock-menu .calendar .calendar-day:hover,
+.mydock-light .mydock-menu .calendar .calendar-day:focus,
+.mydock-light .mydock-menu .calendar .pager-button:hover {
     background-color: rgba(0, 0, 0, 0.08);
 }
-.mydock-light .mydock-menu .calendar-other-month {
+.mydock-light .mydock-menu .calendar .calendar-day.calendar-other-month {
     color: rgba(29, 29, 31, 0.3);
 }
-.mydock-light .mydock-menu .calendar-today,
-.mydock-light .mydock-menu .calendar-today:hover,
-.mydock-light .mydock-menu .calendar-today:focus,
-.mydock-light .mydock-menu .calendar-today:selected {
-    color: #1d1d1f;
-    background-color: rgba(0, 0, 0, 0.18);
+.mydock-light .mydock-menu .calendar .calendar-day.calendar-weekend {
+    color: rgba(29, 29, 31, 0.85);
+}
+.mydock-light .mydock-menu .calendar .calendar-day.calendar-today,
+.mydock-light .mydock-menu .calendar .calendar-day.calendar-today:hover,
+.mydock-light .mydock-menu .calendar .calendar-day.calendar-today:focus,
+.mydock-light .mydock-menu .calendar .calendar-day.calendar-today:selected {
+    color: #ffffff !important;
+    background-color: rgba(60, 60, 64, 0.85);
 }
 .mydock-light .mydock-menu .datemenu-today-button:hover,
 .mydock-light .mydock-menu .events-button:hover,
@@ -509,70 +613,83 @@
     background-color: rgba(0, 0, 0, 0.06);
 }
 
-/* ---- About This PC (aboutpc.js). Dark in both themes, like macOS. ---- */
+/* ---- About This PC (aboutpc.js). Dark frosted window in both themes, like the reference. ---- */
 .modal-dialog.mydock-about {
-  width: 300px;
+  width: 310px;
   padding: 0;
   border-radius: 12px;
-  background-color: rgba(44, 44, 46, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  background-gradient-direction: vertical;
+  background-gradient-start: rgba(70, 70, 72, 0.94);
+  background-gradient-end: rgba(40, 40, 42, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
   color: #f2f2f7;
 }
 .mydock-about .modal-dialog-content-box {
   margin: 0;
-  padding: 10px 20px 18px 20px;
+  padding: 12px 22px 20px 22px;
   spacing: 4px;
 }
-.mydock-about-close {
+.mydock-about-lights {
+  spacing: 8px;
+  margin-bottom: 10px;
+}
+.mydock-about-close,
+.mydock-about-light {
   width: 12px;
   height: 12px;
   border-radius: 6px;
-  background-color: #ff5f57;
-  margin-bottom: 8px;
 }
+.mydock-about-close { background-color: #ff5f57; }
 .mydock-about-close:hover { background-color: #ff3b30; }
+.mydock-about-light { background-color: rgba(255, 255, 255, 0.22); }
 .mydock-about-icon {
   color: #d1d1d6;
-  margin-bottom: 14px;
+  margin-bottom: 18px;
 }
 .mydock-about-host {
   font-weight: bold;
   font-size: 11pt;
 }
 .mydock-about-model {
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.45);
   font-size: 8.5pt;
-  margin-bottom: 14px;
+  font-weight: bold;
+  margin-top: 2px;
+  margin-bottom: 16px;
 }
 .mydock-about-row {
   spacing: 10px;
-  padding: 2px 0;
+  padding: 3px 0;
 }
 .mydock-about-key {
   width: 80px;
   text-align: right;
   font-weight: bold;
   font-size: 9pt;
+  color: #ffffff;
 }
 .mydock-about-value {
   width: 160px;
   text-align: left;
   font-size: 9pt;
-  color: rgba(255, 255, 255, 0.85);
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.78);
 }
 .mydock-about-more {
-  margin-top: 14px;
-  padding: 3px 20px;
+  margin-top: 16px;
+  padding: 3px 22px;
   border-radius: 6px;
   font-weight: bold;
   font-size: 9pt;
   color: #f2f2f7;
   background-color: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition-duration: 120ms;
 }
 .mydock-about-more:hover,
-.mydock-about-more:focus { background-color: rgba(255, 255, 255, 0.3); }
-.mydock-about-more:active { background-color: rgba(255, 255, 255, 0.4); }
+.mydock-about-more:focus { background-color: rgba(255, 255, 255, 0.28); }
+.mydock-about-more:active { background-color: rgba(255, 255, 255, 0.36); }
 
 /* ---- CPU temperature popup card (attachTempPopup) ---- */
 .mydock-temp-item,
@@ -633,13 +750,22 @@
 .mydock-status-title {
     font-weight: bold;
 }
-.mydock-status-heading {
-    font-size: 9.5pt;
-    padding-top: 4px;
-    padding-bottom: 2px;
+/* the switch row on top (Wi-Fi, Bluetooth) */
+.mydock-status-title {
+    padding-top: 5px;
+    padding-bottom: 5px;
 }
+/* section headings ("Device", "Other networks", battery state) read a step dimmer */
+.mydock-status-heading,
 .mydock-status-heading.popup-inactive-menu-item {
-    color: inherit; /* keep headings readable, not greyed out */
+    font-size: 9pt;
+    padding-top: 6px;
+    padding-bottom: 2px;
+    color: rgba(245, 245, 247, 0.72);
+}
+.mydock-light .mydock-status-heading,
+.mydock-light .mydock-status-heading.popup-inactive-menu-item {
+    color: rgba(29, 29, 31, 0.65);
 }
 
 /* rows with a round icon chip; the chip turns blue when the row is the active one */
@@ -651,6 +777,8 @@
     width: 26px;
     height: 26px;
     border-radius: 13px;
+    background-color: rgba(255, 255, 255, 0.14);
+    color: #f5f5f7;
 }
 .mydock-chip-icon {
     icon-size: 14px;
@@ -660,7 +788,7 @@
 .mydock-chip:checked,
 .mydock-dark .mydock-chip:checked,
 .mydock-light .mydock-chip:checked {
-    background-color: #0a84ff;
+    background-color: #1f6fe5;
     color: #ffffff;
 }
 .mydock-row-trailing {
@@ -674,11 +802,14 @@
     padding-bottom: 6px;
 }
 .mydock-slider {
+    height: 24px;
     -barlevel-height: 22px;
     -barlevel-border-width: 0;
     -slider-handle-radius: 11px;
     -slider-handle-border-width: 1px;
     -barlevel-active-background-color: #ffffff;
+    -barlevel-background-color: rgba(255, 255, 255, 0.14);
+    -slider-handle-border-color: rgba(0, 0, 0, 0.25);
     color: #ffffff;
 }
 .mydock-dark .mydock-slider {
@@ -692,8 +823,8 @@
 
 /* account */
 .mydock-account-box {
-    spacing: 10px;
-    padding: 6px 0;
+    spacing: 12px;
+    padding: 8px 0 4px 0;
 }
 .mydock-account-avatar {
     icon-size: 56px;
@@ -726,9 +857,13 @@
 .mydock-media-progress {
     -barlevel-height: 3px;
     -barlevel-border-width: 0;
-    -barlevel-active-background-color: #0a84ff;
+    -barlevel-active-background-color: #ffffff;
+    -slider-handle-radius: 4px;
+    -slider-handle-border-width: 0;
+    color: #ffffff;
     margin-top: 4px;
 }
+.mydock-light .mydock-media-progress { -barlevel-active-background-color: #1d1d1f; color: #1d1d1f; }
 .mydock-dark .mydock-media-progress { -barlevel-background-color: rgba(255, 255, 255, 0.2); }
 .mydock-light .mydock-media-progress { -barlevel-background-color: rgba(0, 0, 0, 0.12); }
 .mydock-media-times {
@@ -752,80 +887,187 @@
 .mydock-dark .mydock-media-button:hover { background-color: rgba(255, 255, 255, 0.12); }
 .mydock-light .mydock-media-button:hover { background-color: rgba(0, 0, 0, 0.08); }
 
-/* ---- control center: GNOME quick settings in the tile look ---- */
+/* ---- control center: GNOME quick settings in the tile look ----
+   Tiles stay neutral with a hairline border; the icon is a round chip that turns blue when on,
+   as in the reference. Checked selectors go up to :checked:hover so the shell theme's accent
+   rules (up to four classes deep) never win. */
 .mydock-control-center .quick-settings {
-    border-radius: 18px;
-    padding: 12px;
+    border-radius: 14px;
+    padding: 10px;
 }
 .mydock-dark .mydock-control-center .quick-settings {
-    background-color: rgba(30, 30, 32, 0.92);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background-color: rgba(24, 24, 25, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.16);
     color: #f5f5f7;
 }
 .mydock-light .mydock-control-center .quick-settings {
-    background-color: rgba(246, 246, 248, 0.94);
+    background-color: rgba(246, 246, 248, 0.95);
     border: 1px solid rgba(0, 0, 0, 0.1);
     color: #1d1d1f;
 }
 .mydock-control-center .quick-settings-grid {
-    spacing-rows: 10px;
-    spacing-columns: 10px;
+    spacing-rows: 8px;
+    spacing-columns: 8px;
 }
 
-/* toggles become tiles, their icon a round chip that turns blue when on */
 .mydock-control-center .quick-toggle,
 .mydock-control-center .quick-menu-toggle .quick-toggle {
     border-radius: 12px;
-    min-height: 44px;
+    min-height: 48px;
+    box-shadow: none;
 }
-.mydock-dark .mydock-control-center .quick-toggle {
-    background-color: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+.mydock-control-center .quick-menu-toggle .quick-toggle:ltr { border-radius: 12px 0 0 12px; }
+.mydock-control-center .quick-menu-toggle .quick-toggle:rtl { border-radius: 0 12px 12px 0; }
+.mydock-control-center .quick-menu-toggle .quick-toggle:ltr:last-child,
+.mydock-control-center .quick-menu-toggle .quick-toggle:rtl:last-child { border-radius: 12px; }
+.mydock-control-center .quick-toggle > StBoxLayout {
+    spacing: 10px;
+}
+.mydock-control-center .quick-toggle:ltr > StBoxLayout { padding-left: 9px; }
+.mydock-control-center .quick-toggle:rtl > StBoxLayout { padding-right: 9px; }
+
+.mydock-dark .mydock-control-center .quick-toggle,
+.mydock-dark .mydock-control-center .quick-toggle:checked,
+.mydock-dark .mydock-control-center .quick-menu-toggle .quick-toggle-arrow,
+.mydock-dark .mydock-control-center .quick-menu-toggle .quick-toggle-arrow:checked {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.16);
     color: #f5f5f7;
 }
-.mydock-light .mydock-control-center .quick-toggle {
+.mydock-dark .mydock-control-center .quick-toggle:hover,
+.mydock-dark .mydock-control-center .quick-toggle:focus,
+.mydock-dark .mydock-control-center .quick-toggle:checked:hover,
+.mydock-dark .mydock-control-center .quick-toggle:checked:focus,
+.mydock-dark .mydock-control-center .quick-menu-toggle .quick-toggle-arrow:hover,
+.mydock-dark .mydock-control-center .quick-menu-toggle .quick-toggle-arrow:checked:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+.mydock-dark .mydock-control-center .quick-toggle:active,
+.mydock-dark .mydock-control-center .quick-toggle:checked:active {
+    background-color: rgba(255, 255, 255, 0.15);
+}
+.mydock-light .mydock-control-center .quick-toggle,
+.mydock-light .mydock-control-center .quick-toggle:checked,
+.mydock-light .mydock-control-center .quick-menu-toggle .quick-toggle-arrow,
+.mydock-light .mydock-control-center .quick-menu-toggle .quick-toggle-arrow:checked {
     background-color: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(0, 0, 0, 0.1);
     color: #1d1d1f;
 }
-.mydock-control-center .quick-toggle:checked,
-.mydock-dark .mydock-control-center .quick-toggle:checked,
-.mydock-light .mydock-control-center .quick-toggle:checked {
-    background-color: #0a84ff;
-    border-color: #0a84ff;
+.mydock-light .mydock-control-center .quick-toggle:hover,
+.mydock-light .mydock-control-center .quick-toggle:focus,
+.mydock-light .mydock-control-center .quick-toggle:checked:hover,
+.mydock-light .mydock-control-center .quick-toggle:checked:focus,
+.mydock-light .mydock-control-center .quick-menu-toggle .quick-toggle-arrow:hover,
+.mydock-light .mydock-control-center .quick-menu-toggle .quick-toggle-arrow:checked:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+    color: #000000;
+}
+.mydock-light .mydock-control-center .quick-toggle:active,
+.mydock-light .mydock-control-center .quick-toggle:checked:active {
+    background-color: rgba(0, 0, 0, 0.09);
+}
+/* the split arrow of menu toggles: drop the double border where it meets the toggle */
+.mydock-control-center .quick-menu-toggle .quick-toggle-arrow:ltr {
+    border-radius: 0 12px 12px 0;
+    border-left-width: 0;
+}
+.mydock-control-center .quick-menu-toggle .quick-toggle-arrow:rtl {
+    border-radius: 12px 0 0 12px;
+    border-right-width: 0;
+}
+
+/* icon chip */
+.mydock-control-center .quick-toggle .quick-toggle-icon {
+    icon-size: 14px;
+    padding: 6px;
+    border-radius: 999px;
+}
+.mydock-dark .mydock-control-center .quick-toggle .quick-toggle-icon {
+    background-color: rgba(255, 255, 255, 0.14);
+    color: #f5f5f7;
+}
+.mydock-light .mydock-control-center .quick-toggle .quick-toggle-icon {
+    background-color: rgba(0, 0, 0, 0.08);
+    color: #1d1d1f;
+}
+.mydock-control-center .quick-toggle:checked .quick-toggle-icon,
+.mydock-dark .mydock-control-center .quick-toggle:checked .quick-toggle-icon,
+.mydock-light .mydock-control-center .quick-toggle:checked .quick-toggle-icon {
+    background-color: #1f6fe5;
     color: #ffffff;
 }
 .mydock-control-center .quick-toggle .quick-toggle-title {
     font-weight: bold;
 }
-.mydock-control-center .quick-menu-toggle .quick-toggle-arrow {
-    border-radius: 0 12px 12px 0;
+.mydock-control-center .quick-toggle .quick-toggle-subtitle {
+    font-size: 8pt;
+    font-weight: bold;
+    opacity: 0.6;
 }
 
-/* sliders sit in their own rounded card, thick pill bar like the menus */
+/* sliders sit in their own rounded tile, thick pill bar with a white round knob */
 .mydock-control-center .quick-slider {
     border-radius: 12px;
     padding: 8px 10px;
 }
 .mydock-dark .mydock-control-center .quick-slider {
-    background-color: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.16);
 }
 .mydock-light .mydock-control-center .quick-slider {
     background-color: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(0, 0, 0, 0.1);
 }
 .mydock-control-center .quick-slider .slider {
-    -barlevel-height: 20px;
+    height: 24px;
+    -barlevel-height: 22px;
     -barlevel-border-width: 0;
-    -slider-handle-radius: 10px;
+    -slider-handle-radius: 11px;
+    -slider-handle-border-width: 1px;
     -barlevel-active-background-color: #ffffff;
     color: #ffffff;
 }
-.mydock-dark .mydock-control-center .quick-slider .slider { -barlevel-background-color: rgba(255, 255, 255, 0.14); }
-.mydock-light .mydock-control-center .quick-slider .slider { -barlevel-background-color: rgba(0, 0, 0, 0.1); }
+.mydock-dark .mydock-control-center .quick-slider .slider {
+    -barlevel-background-color: rgba(255, 255, 255, 0.14);
+    -slider-handle-border-color: rgba(0, 0, 0, 0.25);
+}
+.mydock-light .mydock-control-center .quick-slider .slider {
+    -barlevel-background-color: rgba(0, 0, 0, 0.1);
+    -slider-handle-border-color: rgba(0, 0, 0, 0.18);
+}
+.mydock-control-center .quick-slider .slider-bin {
+    border-radius: 999px;
+}
 
 /* round icon buttons on the top row (screenshot, settings, lock, power) */
 .mydock-control-center .quick-settings-system-item .icon-button {
     border-radius: 999px;
+    box-shadow: none;
+}
+.mydock-dark .mydock-control-center .quick-settings-system-item .icon-button {
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.mydock-dark .mydock-control-center .quick-settings-system-item .icon-button:hover {
+    background-color: rgba(255, 255, 255, 0.18);
+}
+
+/* a toggle's expanded menu (network list etc.) */
+.mydock-control-center .quick-toggle-menu {
+    border-radius: 12px;
+    box-shadow: none;
+}
+.mydock-dark .mydock-control-center .quick-toggle-menu {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+}
+.mydock-light .mydock-control-center .quick-toggle-menu {
+    background-color: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+.mydock-control-center .quick-toggle-menu .header .icon.active {
+    background-color: #1f6fe5;
+    color: #ffffff;
 }
