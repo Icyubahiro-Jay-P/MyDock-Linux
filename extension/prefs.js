@@ -28,7 +28,8 @@ const PAGES = [
     ['Dock', 'view-app-grid-symbolic', 'blue', [
         ['', ['dock-enabled', 'autohide', 'multi-monitor', 'edge-distance']],
         ['Icons', ['icon-size', 'magnify', 'max-size', 'icon-space', 'bounce-on-launch', 'show-labels', 'show-running-dots']],
-        ['Background', ['blur', 'opacity']],
+        ['Background', ['blur', 'blur-windows', 'opacity'],
+            'Blurring windows behind the Dock costs more and leaves the corner tips slightly blurred.'],
         ['Extra icons', ['show-launchpad', 'show-trash', 'show-calendar', 'show-clock']],
     ], 'preview'],
     'MyFinder',
@@ -63,6 +64,7 @@ const TITLES = {
     'show-labels': 'Show app names on hover',
     'show-running-dots': 'Show indicators for open applications',
     'blur': 'Blur',
+    'blur-windows': 'Blur windows behind the Dock',
     'opacity': 'Opacity',
     'show-launchpad': 'Launchpad',
     'show-trash': 'Trash',
