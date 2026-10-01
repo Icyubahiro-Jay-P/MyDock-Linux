@@ -4,7 +4,10 @@
 #   bash dock-install.sh --uninstall  remove and restore the previous dock
 set -euo pipefail
 
-UUID="mydock@jay-p"
+UUID="mydock@icyubahiro-jay-p"
+# Extension ID used up to 1.1.0. Same settings schema, so settings carry over.
+OLD_UUID="mydock@jay-p"
+OLD_DEST="$HOME/.local/share/gnome-shell/extensions/$OLD_UUID"
 DEST="$HOME/.local/share/gnome-shell/extensions/$UUID"
 STATE="$HOME/.local/share/mydock-disabled-extensions"
 SYS="/usr/share/gnome-shell/extensions/$UUID"
@@ -52,8 +55,9 @@ restore_windows() {
 
 if [[ "${1:-}" == "--uninstall" ]]; then
     set_enabled "$UUID" off
+    set_enabled "$OLD_UUID" off
     restore_windows
-    rm -rf "$DEST"
+    rm -rf "$DEST" "$OLD_DEST"
     if [[ -f "$STATE" ]]; then
         while read -r u; do [[ -n "$u" ]] && set_enabled "$u" on; done < "$STATE"
         rm -f "$STATE"
@@ -81,6 +85,12 @@ elif [[ -d "$SYS" ]]; then
     [[ -d "$DEST" ]] && { echo "Removing older per-user copy at $DEST"; rm -rf "$DEST"; }
 else
     echo "MY DOCK FINDER FOR LINUX files not found: no payload in $0 and no $SYS. Reinstall the dock package or use dock-install.sh." >&2; exit 1
+fi
+
+if [[ -d "$OLD_DEST" ]] || is_enabled "$OLD_UUID"; then
+    echo "Removing the old $OLD_UUID copy (your settings are kept)"
+    set_enabled "$OLD_UUID" off
+    rm -rf "$OLD_DEST"
 fi
 
 mkdir -p "${STATE%/*}"
