@@ -329,7 +329,7 @@ export default class MyDockPrefs extends ExtensionPreferences {
         let manual = 0; // this window's own check; never written to last-update-check (the shell updater watches it)
         const syncTime = () => {
             const t = Math.max(Number(settings.get_int64('last-update-check')), manual);
-            status.subtitle = `Last checked: ${t ? GLib.DateTime.new_from_unix_local(t).format('%c') : 'Never'}`;
+            status.subtitle = `Last checked: ${t ? GLib.DateTime.new_from_unix_local(t).format('%x %X') : 'Never'}`;
         };
         settings.connect('changed::last-update-check', syncTime);
         syncTime();
