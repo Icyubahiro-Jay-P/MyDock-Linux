@@ -18,7 +18,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as Util from 'resource:///org/gnome/shell/misc/util.js';
 import * as SystemActions from 'resource:///org/gnome/shell/misc/systemActions.js';
 import {AppMenu} from 'resource:///org/gnome/shell/ui/appMenu.js';
-import {showAboutPC, attachTempPopup} from './aboutpc.js';
+import {showAboutPC, closeAboutPC, attachTempPopup} from './aboutpc.js';
 
 const STORE_APPS = ['snap-store_snap-store.desktop', 'io.snapcraft.Store.desktop', 'org.gnome.Software.desktop'];
 const TASK_APPS = ['org.gnome.SystemMonitor.desktop', 'gnome-system-monitor.desktop', 'gnome-system-monitor-kde.desktop'];
@@ -833,6 +833,7 @@ export class FinderBar {
     }
 
     destroy() {
+        closeAboutPC();
         this._endDrag(false);
         for (const [obj, id] of this._sigs)
             obj.disconnect(id);
