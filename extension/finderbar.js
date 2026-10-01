@@ -89,6 +89,23 @@ function formatRate(bytesPerSec) {
     return `${v < 10 && u > 0 ? v.toFixed(1) : Math.round(v)}${units[u]}`;
 }
 
+// GNOME's Panel gives each side at most half the bar width, so a busy right side (stats, tray
+// icons, clock) got squeezed and ellipsized while the left half sat mostly empty. This runs
+// after the panel allocates the right box and widens it leftwards up to the left box / center.
+const RIGHT_GAP = 12;
+const RightBoxWidth = GObject.registerClass(
+class MyDockRightBoxWidth extends Clutter.Constraint {
+    vfunc_update_allocation(actor, box) {
+        const panel = Main.panel;
+        const W = panel.width;
+        const [, natural] = actor.get_preferred_width(-1);
+        const [, leftNat] = panel._leftBox.get_preferred_width(-1);
+        const [, centerNat] = panel._centerBox.get_preferred_width(-1);
+        const leftEnd = Math.max(Math.min(leftNat, W / 2), centerNat ? (W + centerNat) / 2 : 0);
+        box.x1 = Math.max(leftEnd + RIGHT_GAP, Math.min(box.x1, box.x2 - natural));
+    }
+});
+
 export class FinderBar {
     constructor(ext) {
         this._ext = ext;
@@ -107,6 +124,8 @@ export class FinderBar {
         this._boxes = {left: panel._leftBox, center: panel._centerBox, right: panel._rightBox};
 
         panel.add_style_class_name('mydock-finderbar');
+        this._rightWidth = new RightBoxWidth();
+        panel._rightBox.add_constraint(this._rightWidth);
 
         this._buildLogo();
         this._buildAppName();
@@ -650,6 +669,8 @@ export class FinderBar {
         }
         Main.panel.remove_style_class_name('mydock-finderbar-blur');
         Main.panel.remove_style_class_name('mydock-finderbar');
+        Main.panel._rightBox.remove_constraint(this._rightWidth);
+        this._rightWidth = null;
 
         const panel = Main.panel;
         const dateBox = panel.statusArea.dateMenu?.container;
