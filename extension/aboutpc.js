@@ -46,6 +46,7 @@ export function showAboutPC(_ext) {
         if (_about === dialog)
             _about = null;
     });
+    dialog.buttonLayout.hide();
     const box = dialog.contentLayout;
 
     const close = new St.Button({style_class: 'mydock-about-close', x_align: Clutter.ActorAlign.START});
