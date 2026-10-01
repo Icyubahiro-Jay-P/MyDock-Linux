@@ -18,17 +18,18 @@ function genieDown(p, u, v, W, H, tx, ty, tw, th, out) {
     const a = clamp01(p / GENIE_SPLIT);
     const b = smooth(clamp01((p - GENIE_SPLIT) / (1 - GENIE_SPLIT)));
     const y = lerp(v * H, ty + v * th, b);
-    // funnel: full window width at the window top, target width at the target top
-    const c = ty > 0 ? smooth(clamp01(y / ty)) : 1;
+    // funnel: full window width at the window top, pinching hard toward the bottom so the
+    // lower rows are already near target width while the top is still wide
+    const c = ty > 0 ? 1 - (1 - clamp01(y / ty)) ** 3 : 1;
     out.x = lerp(u * W, tx + u * tw, a * c);
     out.y = y;
 }
 
 // Suck / magic lamp for a target below the window: the edge nearest the target is pulled in
-// first, the far edge follows, and x collapses faster than y for a strong curve.
+// first, the far edge follows, and x collapses much faster than y so the bottom goes narrow.
 function suckDown(p, u, v, W, H, tx, ty, tw, th, out) {
     const t = clamp01(p * (1 + SUCK_SPREAD) - SUCK_SPREAD * (1 - v));
-    out.x = lerp(u * W, tx + u * tw, 1 - (1 - t) ** 3);
+    out.x = lerp(u * W, tx + u * tw, 1 - (1 - t) ** 5);
     out.y = lerp(v * H, ty + v * th, t * t);
 }
 
