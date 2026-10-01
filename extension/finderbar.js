@@ -102,7 +102,8 @@ class MyDockRightBoxWidth extends Clutter.Constraint {
         const [, leftNat] = panel._leftBox.get_preferred_width(-1);
         const [, centerNat] = panel._centerBox.get_preferred_width(-1);
         const leftEnd = Math.max(Math.min(leftNat, W / 2), centerNat ? (W + centerNat) / 2 : 0);
-        box.x1 = Math.max(leftEnd + RIGHT_GAP, Math.min(box.x1, box.x2 - natural));
+        const x1 = Math.max(leftEnd + RIGHT_GAP, Math.min(box.x1, box.x2 - natural));
+        box.init_rect(x1, box.y1, box.x2 - x1, box.y2 - box.y1);
     }
 });
 
