@@ -23,8 +23,13 @@ const FALLBACK_APP = 'org.gnome.Nautilus.desktop';
 const SECONDS_RE = /%[-_0^#]*[EO]?[sSTrXcf]/;
 
 const STATS_SECONDS = 2;
-// [stat key (settings key is stats-<key>), icon file in icons/mydock-<icon>-symbolic.svg]
-const STATS = [['cpu', 'cpu'], ['temp', 'temp'], ['mem', 'memory'], ['disk', 'disk'], ['net', 'network']];
+// [stat key (settings key is stats-<key>), icon file in icons/mydock-<icon>-symbolic.svg, name]
+const STATS = [
+    ['cpu', 'cpu', 'CPU Usage'], ['temp', 'temp', 'CPU Temperature'], ['mem', 'memory', 'Memory Usage'],
+    ['disk', 'disk', 'Disk Usage'], ['net', 'network', 'Network Speed'],
+];
+const MEM_TOTAL_RE = /^MemTotal:\s+(\d+)/m;
+const MEM_AVAIL_RE = /^MemAvailable:\s+(\d+)/m;
 
 function readText(path) {
     try {
@@ -131,6 +136,8 @@ export class FinderBar {
         this._buildLogo();
         this._buildAppName();
         this._buildClock();
+        this._statBtn = {}; // stat key -> its PanelMenu.Button
+        this._stat = {}; // stat key -> its value label
         this._syncStats();
         this._layout();
         this._syncBlur();
@@ -139,6 +146,8 @@ export class FinderBar {
         this._connect(this._settings, 'changed::logo-path', () => this._syncLogo());
         this._connect(this._settings, 'changed::time-format', () => this._tick(true));
         this._connect(this._settings, 'changed::finderbar-stats', () => this._syncStats());
+        for (const [key] of STATS)
+            this._connect(this._settings, `changed::stats-${key}`, () => this._syncStat(key));
         this._connect(this._settings, 'changed::stage-manager',
             () => this._stageItem.setToggleState(this._settings.get_boolean('stage-manager')));
         // session mode changes (e.g. after unlock) rebuild the panel boxes and undo our layout
