@@ -18,23 +18,23 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {genieVertex, suckVertex, targetSide} from './deform-math.js';
 
-const STRIP_PX = 8;     // one mesh strip per ~8px of window
+const STRIP_PX = 3;     // one mesh strip per ~3px of window
 const MIN_STRIPS = 24;
-const MAX_STRIPS = 96;
+const MAX_STRIPS = 300;
 const VERTEX = {genie: genieVertex, suck: suckVertex};
-const STAGE_MS = 380;       // Stage Manager fly-out (fixed: it is not the user's minimize effect)
+const STAGE_MS = 520;       // Stage Manager fly-out (fixed: it is not the user's minimize effect)
 const STAGE_MAX_AGE = 2e6;  // us a recorded thumbnail rect stays valid for
 
 // Clutter.DeformEffect subclassed from GJS paints nothing on mutter 46, so the mesh is built
 // from clipped clones instead: the window is cut into thin strips across the funnel direction,
 // and every frame each strip is scaled and moved so its corners follow the vertex function.
 class StripMesh {
-    constructor(actor, vertexFn, width, height, target) {
+    constructor(actor, vertexFn, width, height, target, side) {
         this._fn = vertexFn;
         this._w = width;
         this._h = height;
         this._t = target;
-        this._side = targetSide(width, height, target);
+        this._side = side ?? targetSide(width, height, target);
         // strips run across the direction the window travels (rows for a dock below/above)
         this._rows = this._side === 'bottom' || this._side === 'top';
         const len = this._rows ? height : width;
@@ -211,21 +211,43 @@ export class MinimizeEffects {
 
         actor.set_pivot_point(0, 0);
         if (effect === 'stage') {
-            // start as the tilted thumbnail and spring out to the window with a slight overshoot
-            actor.set({
+            // Mutter may restyle/kill effects on the real actor while Stage Manager activates and
+            // raises it, which cut the old ease short. So finish the unminimize right away and fly
+            // a clone out of the thumbnail; the real window stays transparent until it lands.
+            finish();
+            const clone = new Clutter.Clone({
+                source: actor,
+                x: buf.x, y: buf.y, width: w, height: h,
+                pivot_point: new Graphene.Point({x: 0, y: 0}),
                 scale_x: w ? target.width / w : 0,
                 scale_y: h ? target.height / h : 0,
                 translation_x: target.x,
                 translation_y: target.y,
                 rotation_angle_y: 14,
-                opacity: 160,
+                opacity: 200,
             });
-            actor.ease({
-                scale_x: 1, scale_y: 1, translation_x: 0, translation_y: 0, rotation_angle_y: 0, opacity: 255,
+            global.window_group.insert_child_above(clone, actor);
+            actor.opacity = 0;
+            let gone = 0;
+            const done = () => {
+                if (!gone)
+                    return; // window closed mid-flight
+                actor.disconnect(gone);
+                gone = 0;
+                clone.destroy();
+                actor.opacity = 255;
+            };
+            gone = actor.connect('destroy', () => {
+                gone = 0;
+                clone.destroy();
+            });
+            clone.ease({
+                scale_x: 1, scale_y: 1, translation_x: 0, translation_y: 0, opacity: 255,
                 duration: STAGE_MS,
-                mode: Clutter.AnimationMode.EASE_OUT_BACK,
-                onStopped: finish,
+                mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+                onStopped: done,
             });
+            clone.ease_property('rotation-angle-y', 0, {duration: STAGE_MS, mode: Clutter.AnimationMode.EASE_IN_OUT_SINE});
             return;
         }
         if (effect === 'scale') {
@@ -248,7 +270,9 @@ export class MinimizeEffects {
             return;
         }
 
-        mesh = new StripMesh(actor, VERTEX[effect] ?? genieVertex, w, h, target);
+        // the dock sits at the bottom: always funnel down into it, even when the window overlaps
+        // the dock and its icon would otherwise count as being to the side
+        mesh = new StripMesh(actor, VERTEX[effect] ?? genieVertex, w, h, target, r.dock ? 'bottom' : undefined);
         // the clones override the source opacity while painting, so this only hides the real window
         actor.opacity = 0;
         // Timeline ignores the slow-down factor that ease() applies, so apply it here
@@ -286,7 +310,7 @@ export class MinimizeEffects {
         const app = Shell.WindowTracker.get_default().get_window_app(win);
         const dockRect = app ? this._ext.dock?.getIconRect(app) : null;
         if (dockRect)
-            return dockRect;
+            return {...dockRect, dock: true};
         const [ok, geom] = win.get_icon_geometry();
         if (ok)
             return {x: geom.x, y: geom.y, width: geom.width, height: geom.height};
