@@ -148,8 +148,10 @@ class StatusItem {
         menu.actor.add_style_class_name('mydock-menu');
         menu.actor.add_style_class_name('mydock-status-menu');
         menu.connect('open-state-changed', (_m, open) => {
-            if (open)
+            if (open) {
+                this._onOpen?.();
                 this._rebuild();
+            }
             else
                 this._run(this._openDrops);
         });
@@ -269,6 +271,17 @@ class WifiItem extends StatusItem {
             this.icon.icon_name = 'network-wireless-offline-symbolic';
     }
 
+    // once per open, not per rebuild: scan results arriving rebuild the list
+    _onOpen() {
+        if (!this._client?.wireless_enabled || !this._device)
+            return;
+        this._device.request_scan_async(null, (d, res) => {
+            try {
+                d.request_scan_finish(res);
+            } catch {} // NM refuses scans that come too close together
+        });
+    }
+
     _fill(menu) {
         const client = this._client;
         if (!client)
@@ -280,12 +293,7 @@ class WifiItem extends StatusItem {
 
         const device = this._device;
         if (on && device) {
-            // scans and AP changes only matter while someone looks at the list
-            device.request_scan_async(null, (d, res) => {
-                try {
-                    d.request_scan_finish(res);
-                } catch {} // NM refuses scans that come too close together
-            });
+            // AP changes only matter while someone looks at the list
             this._connect(device, 'access-point-added', () => this._queueRefresh(), this._openDrops);
             this._connect(device, 'access-point-removed', () => this._queueRefresh(), this._openDrops);
 
@@ -442,7 +450,7 @@ class AccountItem extends StatusItem {
         const user = this._user;
         const item = new PopupMenu.PopupBaseMenuItem({activate: false, hover: false, can_focus: false, style_class: 'mydock-account'});
         const box = new St.BoxLayout({vertical: true, x_expand: true, style_class: 'mydock-account-box'});
-        const avatar = new Avatar(user, {iconSize: 56, styleClass: 'user-icon mydock-account-avatar'});
+        const avatar = new Avatar(user, {iconSize: 56, styleClass: 'mydock-account-avatar'});
         avatar.x_align = Clutter.ActorAlign.CENTER;
         const name = new St.Label({style_class: 'mydock-account-name', x_align: Clutter.ActorAlign.CENTER});
         box.add_child(avatar);
