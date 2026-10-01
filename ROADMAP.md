@@ -32,7 +32,7 @@ clock, drag to reorder, autohide, a dock on every monitor, right-click app menu.
 | Planned | Separator between pinned apps and other running apps | Thin `St.Widget` between the two groups in `setApps()` |
 | Planned | "Show suggested and recent apps in Dock" | Keep the last 3 closed unpinned apps in a key, show them after the separator |
 | Planned | Bounce when an app needs attention | Watch `demands-attention` / `urgent` on windows, reuse `_bounce()` |
-| Planned | Notification badges and progress bars | Listen to the `com.canonical.Unity.LauncherEntry` DBus signal (used by Chrome, Telegram, Thunderbird, Nautilus) |
+| Done | Progress bars (`com.canonical.Unity.LauncherEntry`), badges still planned | Listen to the `com.canonical.Unity.LauncherEntry` DBus signal (used by Chrome, Telegram, Thunderbird, Nautilus) |
 | Planned | Click on the focused app to minimize, scroll to cycle windows | `click-action` enum: none, minimize, cycle, preview |
 | Planned | Middle click opens a new window, Ctrl click hides other apps | Extend `_clicked()` |
 | Planned | Drag an icon out of the Dock to remove it, with a puff | In the drag-end handler, unpin when dropped outside the dock |
@@ -48,16 +48,16 @@ clock, drag to reorder, autohide, a dock on every monitor, right-click app menu.
 ## Menu bar (`extension/finderbar.js`)
 
 Already done: logo menu, focused app name with its app menu, custom clock, blur, notifications at
-the top right.
+the top right, bold macOS-style dark menus, About This PC window, CPU temperature popup.
 
 | Status | Feature | How |
 | --- | --- | --- |
 | Planned | Bold app name and real app menus (File, Edit, View, Window, Help) | Read the app's exported `org.gtk.Menus` or `com.canonical.dbusmenu` menu, fall back to the current AppMenu |
-| Planned | Logo menu: Recent Items submenu | Parse `~/.local/share/recently-used.xbel` |
+| Done | Logo menu: Recently opened files submenu, Task Manager | Parse `~/.local/share/recently-used.xbel` |
 | Planned | Logo menu: Force Quit... | Dialog listing running apps, quit with `app.request_quit()`, kill if it does not respond |
-| Planned | Window menu: Minimize, Zoom, Tile left or right, Bring All to Front | New `PanelMenu.Button` after the app name |
+| Done | File, View and Window menus: New/Close Window, Quit, Full Screen, Minimize, Zoom, Tile left or right, Bring All to Front | New `PanelMenu.Button` after the app name |
 | Planned | Spotlight icon on the right | Opens the overview with the search entry focused |
-| Planned | Control Center: one icon for quick settings | Restyle the quick settings button, keep GNOME's menu |
+| Done | Control Center: one icon for quick settings, plus separate Wi-Fi, Bluetooth, Sound, Display, Battery, Account and tray menus (`statusmenus.js`) | Restyle the quick settings button, keep GNOME's menu |
 | Planned | Automatically hide and show the menu bar | Slide the panel away, reveal at the top edge, always in fullscreen |
 | Planned | Clock presets | Choice row with common formats, keep raw strftime as advanced |
 
