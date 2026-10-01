@@ -125,6 +125,8 @@ export default class MyDockExtension extends Extension {
     // Returns a Gio.FileIcon if the theme overrides this app's icon, else null.
     // Cached per theme (reset in _loadTheme) so dock rebuilds don't stat the disk per app.
     iconOverride(appId) {
+        if (!appId || !this._icons)
+            return null;
         if (!this._icons.has(appId)) {
             const f = this._themeDir().get_child('icons').get_child(`${appId.replace(/\.desktop$/, '')}.png`);
             this._icons.set(appId, f.query_exists(null) ? new Gio.FileIcon({file: f}) : null);
