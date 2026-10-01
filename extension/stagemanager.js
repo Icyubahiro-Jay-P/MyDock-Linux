@@ -36,6 +36,7 @@ export class StageManager {
         this._peek = false;
         this._shown = false;
         this._rect = null;
+        this._titles = new Map();    // Shell.App -> title St.Label in the strip
 
         this._strip = new St.BoxLayout({
             style_class: 'mydock-stage-strip',
@@ -119,6 +120,7 @@ export class StageManager {
         this._strip = this._edge = this._blur = this._stripBox = this._edgeBox = null;
         this._stage = null;
         this._mru = [];
+        this._titles.clear();
     }
 
     // trackFullscreen forces the tracked actor's `visible`, so track a wrapper
@@ -274,18 +276,24 @@ export class StageManager {
 
         const mon = Main.layoutManager.primaryMonitor;
         // everything the strip shows; window-created also fires for menus/tooltips, so most
-        // syncs change nothing and must not rebuild the clones
+        // syncs change nothing and must not rebuild the clones. Titles are not in the key:
+        // browser tab-title churn only updates the labels in place below.
         const key = [mon?.x, mon?.y, mon?.height, this._settings.get_int('stage-size'),
-            this._settings.get_boolean('stage-show-title'), ...apps.map(app => {
-                const wins = groups.get(app);
-                return `${app.get_id()}:${wins.map(w => w.get_id()).join(',')}:${wins[wins.length - 1].get_title()}`;
-            })].join('|');
+            this._settings.get_boolean('stage-show-title'), ...apps.map(app =>
+                `${app.get_id()}:${groups.get(app).map(w => w.get_id()).join(',')}`)].join('|');
         if (key === this._key) {
+            for (const [app, label] of this._titles) {
+                const wins = groups.get(app);
+                const text = wins[wins.length - 1].get_title() || app.get_name();
+                if (label.text !== text)
+                    label.text = text;
+            }
             this._updateReveal();
             return;
         }
         this._key = key;
 
+        this._titles.clear();
         this._strip.destroy_all_children();
         for (const app of apps)
             this._strip.add_child(this._buildGroup(app, groups.get(app)));
@@ -381,6 +389,7 @@ export class StageManager {
             label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
             label.style = `max-width: ${size - ICON_SIZE}px;`;
             row.add_child(label);
+            this._titles.set(app, label);
         }
         box.add_child(row);
 
