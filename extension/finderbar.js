@@ -22,6 +22,71 @@ const FALLBACK_APP = 'org.gnome.Nautilus.desktop';
 // strftime conversions that show seconds (%S %s %T %r %X %c %f, with optional flags/E/O); %% is a literal
 const SECONDS_RE = /%[-_0^#]*[EO]?[sSTrXcf]/;
 
+const STATS_SECONDS = 2;
+
+function readText(path) {
+    try {
+        const [ok, bytes] = GLib.file_get_contents(path);
+        return ok ? new TextDecoder().decode(bytes) : null;
+    } catch {
+        return null;
+    }
+}
+
+// /proc/stat first line: user nice system idle iowait irq softirq steal ...
+function readCpu() {
+    const f = readText('/proc/stat')?.split('\n')[0].trim().split(/\s+/).slice(1).map(Number);
+    if (!f?.length)
+        return null;
+    return {total: f.reduce((a, b) => a + b, 0), idle: f[3] + (f[4] ?? 0)};
+}
+
+// summed rx/tx bytes of every interface but loopback
+function readNet() {
+    const lines = readText('/proc/net/dev')?.split('\n').slice(2) ?? [];
+    let rx = 0, tx = 0;
+    for (const line of lines) {
+        const [name, data] = line.split(':');
+        if (!data || name.trim() === 'lo')
+            continue;
+        const f = data.trim().split(/\s+/).map(Number);
+        rx += f[0];
+        tx += f[8];
+    }
+    return lines.length ? {rx, tx} : null;
+}
+
+// CPU package temperature: coretemp / k10temp hwmon, else the x86_pkg_temp or first thermal zone
+function findTempFile() {
+    for (let i = 0; i < 32; i++) {
+        const name = readText(`/sys/class/hwmon/hwmon${i}/name`)?.trim();
+        if (name === undefined)
+            continue;
+        if (['coretemp', 'k10temp', 'zenpower', 'cpu_thermal'].includes(name) && readText(`/sys/class/hwmon/hwmon${i}/temp1_input`))
+            return `/sys/class/hwmon/hwmon${i}/temp1_input`;
+    }
+    let first = null;
+    for (let i = 0; i < 32; i++) {
+        const type = readText(`/sys/class/thermal/thermal_zone${i}/type`)?.trim();
+        if (type === undefined)
+            continue;
+        if (type === 'x86_pkg_temp')
+            return `/sys/class/thermal/thermal_zone${i}/temp`;
+        first ??= `/sys/class/thermal/thermal_zone${i}/temp`;
+    }
+    return first;
+}
+
+function formatRate(bytesPerSec) {
+    const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+    let v = Math.max(0, bytesPerSec), u = 0;
+    while (v >= 1000 && u < units.length - 1) {
+        v /= 1024;
+        u++;
+    }
+    return `${v < 10 && u > 0 ? v.toFixed(1) : Math.round(v)}${units[u]}`;
+}
+
 export class FinderBar {
     constructor(ext) {
         this._ext = ext;
@@ -44,12 +109,14 @@ export class FinderBar {
         this._buildLogo();
         this._buildAppName();
         this._buildClock();
+        this._syncStats();
         this._layout();
         this._syncBlur();
 
         this._connect(this._settings, 'changed::finderbar-blur', () => this._syncBlur());
         this._connect(this._settings, 'changed::logo-path', () => this._syncLogo());
         this._connect(this._settings, 'changed::time-format', () => this._tick(true));
+        this._connect(this._settings, 'changed::finderbar-stats', () => this._syncStats());
         this._connect(this._settings, 'changed::stage-manager',
             () => this._stageItem.setToggleState(this._settings.get_boolean('stage-manager')));
         // session mode changes (e.g. after unlock) rebuild the panel boxes and undo our layout
@@ -194,6 +261,103 @@ export class FinderBar {
         const text = now.format(format) || this._clockDisplay.text;
         if (force || text !== this._clockLabel.text)
             this._clockLabel.text = text;
+    }
+
+    // ---- right: live system stats (CPU, temperature, memory, disk, network) ----
+
+    _syncStats() {
+        const on = this._settings.get_boolean('finderbar-stats');
+        if (on && !this._statsButton)
+            this._buildStats();
+        else if (!on && this._statsButton)
+            this._destroyStats();
+    }
+
+    _buildStats() {
+        const btn = new PanelMenu.Button(0.0, 'System Stats', true);
+        btn.add_style_class_name('mydock-stats-button');
+        const box = new St.BoxLayout({style_class: 'mydock-stats'});
+        // [key, caption]; captions are stacked letters like the macOS menu bar meters
+        this._stat = {};
+        for (const [key, caption] of [['cpu', 'CPU'], ['temp', ''], ['mem', 'MEM'], ['disk', 'SSD'], ['net', '']]) {
+            const cell = new St.BoxLayout({style_class: 'mydock-stat', y_align: Clutter.ActorAlign.CENTER});
+            if (caption) {
+                cell.add_child(new St.Label({
+                    text: caption.split('').join('\n'),
+                    style_class: 'mydock-stat-caption',
+                    y_align: Clutter.ActorAlign.CENTER,
+                }));
+            }
+            const value = new St.Label({
+                style_class: key === 'net' ? 'mydock-stat-value mydock-stat-net' : 'mydock-stat-value',
+                y_align: Clutter.ActorAlign.CENTER,
+            });
+            cell.add_child(value);
+            box.add_child(cell);
+            this._stat[key] = value;
+        }
+        btn.add_child(box);
+        this._statsButton = btn;
+        this._tempFile = findTempFile();
+        this._prevCpu = null;
+        this._prevNet = null;
+        this._statTick = 0;
+        Main.panel.addToStatusArea('mydock-stats', btn, 0, 'right');
+        this._updateStats();
+        this._statsId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, STATS_SECONDS, () => {
+            this._updateStats();
+            return GLib.SOURCE_CONTINUE;
+        });
+    }
+
+    _destroyStats() {
+        if (this._statsId) {
+            GLib.source_remove(this._statsId);
+            this._statsId = 0;
+        }
+        this._statsButton?.destroy();
+        this._statsButton = null;
+        this._stat = null;
+    }
+
+    _updateStats() {
+        const cpu = readCpu();
+        if (cpu && this._prevCpu) {
+            const total = cpu.total - this._prevCpu.total;
+            const busy = total - (cpu.idle - this._prevCpu.idle);
+            this._stat.cpu.text = `${total > 0 ? Math.round(100 * busy / total) : 0}%`;
+        }
+        this._prevCpu = cpu;
+
+        const temp = this._tempFile ? parseInt(readText(this._tempFile)) : NaN;
+        this._stat.temp.get_parent().visible = !isNaN(temp);
+        this._stat.temp.text = `${Math.round(temp / 1000)}\u00b0`;
+
+        const mem = readText('/proc/meminfo');
+        const kb = name => parseInt(mem?.match(new RegExp(`^${name}:\\s+(\\d+)`, 'm'))?.[1] ?? '0');
+        const total = kb('MemTotal');
+        this._stat.mem.text = total ? `${Math.round(100 * (total - kb('MemAvailable')) / total)}%` : '';
+
+        // disk usage changes slowly: every 15th tick (~30 s)
+        if (this._statTick++ % 15 === 0) {
+            try {
+                const info = Gio.File.new_for_path('/').query_filesystem_info('filesystem::size,filesystem::free', null);
+                const size = info.get_attribute_uint64('filesystem::size');
+                const free = info.get_attribute_uint64('filesystem::free');
+                this._stat.disk.text = size ? `${Math.round(100 * (size - free) / size)}%` : '';
+            } catch {
+                this._stat.disk.get_parent().hide();
+            }
+        }
+
+        const net = readNet();
+        const now = GLib.get_monotonic_time();
+        if (net && this._prevNet) {
+            const dt = (now - this._prevNet.time) / 1e6;
+            const up = (net.tx - this._prevNet.tx) / dt, down = (net.rx - this._prevNet.rx) / dt;
+            this._stat.net.text = `${formatRate(up)}\n${formatRate(down)}`;
+        }
+        this._prevNet = net ? {...net, time: now} : null;
     }
 
     // ---- layout / blur ----
@@ -450,6 +614,7 @@ export class FinderBar {
             this._clockDisplay.visible = this._clockWasVisible;
         }
 
+        this._destroyStats();
         this._appButton.destroy(); // also destroys its menu
         this._logoButton.destroy();
 
