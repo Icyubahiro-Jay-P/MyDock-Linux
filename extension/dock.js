@@ -277,8 +277,17 @@ class DockItem extends St.Button {
         this._setProgress(p);
         this._dot.visible = p === null && settings.get_boolean('show-running-dots') &&
             this.app.state !== Shell.AppState.STOPPED;
+        this.setFocused(this.app === this._bar.dock.focusApp);
         if (this.app.state === Shell.AppState.STARTING && settings.get_boolean('bounce-on-launch'))
             this._bounce();
+    }
+
+    // focused app: the running dot becomes a short underline bar (theme: .mydock-dot-focused)
+    setFocused(on) {
+        if (on)
+            this._dot.add_style_class_name('mydock-dot-focused');
+        else
+            this._dot.remove_style_class_name('mydock-dot-focused');
     }
 
     // p in 0..1, or null to hide the track
@@ -1453,6 +1462,17 @@ export class Dock {
     _trackFocus() {
         this._focusWin?.disconnectObject(this);
         this._focusWin = global.display.focus_window;
+        const app = this._focusWin ? Shell.WindowTracker.get_default().get_window_app(this._focusWin) : null;
+        if (app !== this.focusApp) {
+            const old = this.focusApp;
+            this.focusApp = app;
+            for (const b of this._bars) {
+                if (old)
+                    b.itemFor(old)?.setFocused(false);
+                if (app)
+                    b.itemFor(app)?.setFocused(true);
+            }
+        }
         this._focusWin?.connectObject(
             'position-changed', () => this.queueHideCheck(),
             'size-changed', () => this.queueHideCheck(),
