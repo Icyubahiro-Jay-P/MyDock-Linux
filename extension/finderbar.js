@@ -363,6 +363,9 @@ export class FinderBar {
     }
 
     _updateStats() {
+        // nobody can see it (locked, fullscreen, panel hidden): skip the /proc reads
+        if (!this._statsButton.mapped)
+            return;
         const cpu = readCpu();
         if (cpu && this._prevCpu) {
             const total = cpu.total - this._prevCpu.total;
