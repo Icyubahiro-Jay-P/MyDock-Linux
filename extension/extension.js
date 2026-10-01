@@ -47,13 +47,11 @@ export default class MyDockExtension extends Extension {
     }
 
     disable() {
-        for (const [obj, id] of this._sigs)
+        for (const [obj, id] of this._sigs ?? [])
             obj.disconnect(id);
         this._sigs = null;
-        for (const [prop] of [...FEATURES].reverse()) {
-            this[prop]?.destroy();
-            this[prop] = null;
-        }
+        for (const [prop] of [...FEATURES].reverse())
+            this._destroy(prop);
         this._unloadTheme();
         Main.uiGroup.remove_style_class_name('mydock-dark');
         Main.uiGroup.remove_style_class_name('mydock-light');
@@ -73,9 +71,17 @@ export default class MyDockExtension extends Extension {
                 this[prop] = null;
             }
         } else if (!want && this[prop]) {
-            this[prop].destroy();
-            this[prop] = null;
+            this._destroy(prop);
         }
+    }
+
+    _destroy(prop) {
+        try {
+            this[prop]?.destroy();
+        } catch (e) {
+            logError(e, `MyDock: ${prop} failed to stop`);
+        }
+        this[prop] = null;
     }
 
     isDark() {
