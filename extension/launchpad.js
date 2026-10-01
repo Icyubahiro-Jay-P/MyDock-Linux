@@ -126,7 +126,17 @@ export class Launchpad {
 
         this._apps = this._appList();
         this._tiles = new Map(this._apps.map(app => [app, this._buildTile(app)]));
+        // lowercased name + keywords once per open, not per app per keystroke
+        this._terms = new Map(this._apps.map(app => [app, [app.get_name(),
+            ...(app.get_app_info()?.get_keywords?.() ?? [])].map(t => t.toLowerCase())]));
+        // every tile stays in the strip; _filter() only shows / hides and positions them
+        const cw = Math.floor(g.width / COLS), ch = Math.floor(g.height / ROWS);
+        for (const tile of this._tiles.values()) {
+            tile.set_size(cw, ch);
+            this._strip.add_child(tile);
+        }
         this._page = 0;
+        this._pages = 0;    // forces the first _filter() to build the dots
         this._filter();
 
         this._actor.connect('button-press-event', (_a, ev) => this._onPress(ev));
@@ -173,7 +183,7 @@ export class Launchpad {
         this._bgManager = null;
         this._actor?.destroy();
         this._actor = this._content = this._search = this._viewport = this._strip = this._dots = null;
-        this._tiles = null;
+        this._tiles = this._terms = null;
         this._apps = [];
         this._visible = [];
         this._closing = false;
@@ -212,24 +222,26 @@ export class Launchpad {
     // Lay the matching apps out into pages of COLS x ROWS.
     _filter() {
         const q = this._search.get_text().trim().toLowerCase();
-        const match = app => app.get_name().toLowerCase().includes(q) ||
-            (app.get_app_info()?.get_keywords?.() ?? []).some(k => k.toLowerCase().includes(q));
+        const match = app => this._terms.get(app).some(t => t.includes(q));
         this._visible = (q ? this._apps.filter(match) : this._apps).map(a => this._tiles.get(a));
 
-        for (const t of this._strip.get_children())
-            this._strip.remove_child(t);
+        // hide / show instead of remove / re-add: re-parenting restyles every tile
+        const shown = new Set(this._visible);
+        for (const t of this._tiles.values())
+            t.visible = shown.has(t);
         const {width: W, height: H} = this._grid;
         const cw = W / COLS, ch = H / ROWS;
         this._visible.forEach((tile, i) => {
             const page = Math.floor(i / PER_PAGE);
             const k = i % PER_PAGE;
             tile.set_position(Math.round(page * W + (k % COLS) * cw), Math.round(Math.floor(k / COLS) * ch));
-            tile.set_size(Math.floor(cw), Math.floor(ch));
-            this._strip.add_child(tile);
         });
-        this._pages = Math.max(1, Math.ceil(this._visible.length / PER_PAGE));
+        const pages = Math.max(1, Math.ceil(this._visible.length / PER_PAGE));
+        const rebuildDots = pages !== this._pages;   // dots only change with the page count
+        this._pages = pages;
         this._strip.set_size(this._pages * W, H);
-        this._buildDots();
+        if (rebuildDots)
+            this._buildDots();
         this._goto(q ? 0 : this._page, false);
     }
 
