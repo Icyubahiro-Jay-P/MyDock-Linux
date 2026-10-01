@@ -7,6 +7,7 @@
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import GObject from 'gi://GObject';
 import Gvc from 'gi://Gvc';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
@@ -160,7 +161,10 @@ class StatusItem {
 
     _connect(obj, sig, fn, list = this._sigs) {
         const id = obj.connect(sig, fn);
-        list.push(() => obj.disconnect(id));
+        // not obj.disconnect(): NM.Device.disconnect() drops the network connection instead
+        list.push(obj instanceof GObject.Object
+            ? () => GObject.signal_handler_disconnect(obj, id)
+            : () => obj.disconnect(id));
     }
 
     _run(list) {
@@ -938,8 +942,12 @@ class ControlCenter {
                 : new Gio.ThemedIcon({names: ['org.gnome.Settings-symbolic', 'emblem-system-symbolic']}),
             style_class: 'system-status-icon mydock-control-center-icon',
         });
-        // PanelMenu.Button only lays out its first child
-        qs.insert_child_at_index(this._icon, 0);
+        // inside the indicator box (PanelMenu.Button only lays out its first child), last so the
+        // kept privacy indicators sit left of it
+        if (box)
+            box.add_child(this._icon);
+        else
+            qs.insert_child_at_index(this._icon, 0);
         qs.add_style_class_name('mydock-control-center-button');
         qs.menu.actor.add_style_class_name('mydock-control-center');
     }
@@ -948,8 +956,8 @@ class ControlCenter {
         if (!this._qs)
             return;
         this._icon.destroy();
-        // lowest original index first so the indices still line up
-        for (const [actor, index] of this._detached.sort((a, b) => a[1] - b[1]))
+        // undo in reverse: each index was taken after the earlier removals
+        for (const [actor, index] of this._detached.reverse())
             this._box.insert_child_at_index(actor, Math.min(index, this._box.get_n_children()));
         this._detached = [];
         this._qs.remove_style_class_name('mydock-control-center-button');
