@@ -2,6 +2,7 @@
 // Magnification is done with set_scale + translation_x only (no relayout),
 // driven by a per-frame timeline that eases current values toward targets.
 
+import Cairo from 'cairo';
 import Clutter from 'gi://Clutter';
 import GObject from 'gi://GObject';
 import Gio from 'gi://Gio';
@@ -88,17 +89,20 @@ class DockItem extends St.Button {
                 this.fake_release();
                 bar.hideLabel();
                 this.opacity = 90;
+                bar.dock.setDragging(true);
             });
             this._draggable.connect('drag-cancelled', () => bar.dock.onDragCancelled(this));
             this._draggable.connect('drag-end', () => {
                 this.opacity = 255;
                 bar.dock.clearDropGaps();
+                bar.dock.setDragging(false);
             });
         }
         this.connect('destroy', () => {
             this._menu?.destroy();
             this._menu = null;
             this._bouncing = false;
+            this._gone = true;
         });
         this.sync();
     }
@@ -142,22 +146,31 @@ class DockItem extends St.Button {
             return;
         this._bouncing = true;
         const h = this._bar.geom.S * 0.45;
+        // an interrupted ease (unmap, replaced transition) never completes: always land back at 0
+        const reset = () => {
+            this._bouncing = false;
+            if (this._gone)
+                return;
+            if (this._icon.mapped)
+                this._icon.ease({translation_y: 0, duration: 150, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+            else
+                this._icon.translation_y = 0;
+        };
         const step = () => {
             if (!this._bouncing || this.app.state !== Shell.AppState.STARTING) {
-                this._bouncing = false;
-                this._icon.ease({translation_y: 0, duration: 150, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
+                reset();
                 return;
             }
             this._icon.ease({
                 translation_y: -h,
                 duration: 280,
                 mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-                onComplete: () => this._icon.ease({
+                onStopped: up => (up ? this._icon.ease({
                     translation_y: 0,
                     duration: 280,
                     mode: Clutter.AnimationMode.EASE_IN_QUAD,
-                    onComplete: step,
-                }),
+                    onStopped: down => (down ? step() : reset()),
+                }) : reset()),
             });
         };
         step();
@@ -211,6 +224,81 @@ class DockItem extends St.Button {
             } else {
                 return;
             }
+            if (this.app) {
+                this._menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+                this._sepItem = this._menu.addAction('Add Separator After',
+                    () => this._bar.dock.addSeparator(this.app.get_id()));
+            }
+            this._menu.actor.add_style_class_name('mydock-menu');
+            this._menu.connect('open-state-changed', () => this._bar.dock.queueHideCheck());
+            Main.uiGroup.add_child(this._menu.actor);
+            this._menu.actor.hide();
+            this._menuManager = new PopupMenu.PopupMenuManager(this);
+            this._menuManager.addMenu(this._menu);
+        }
+        if (this._sepItem) {
+            this._sepItem.visible = this.pinned &&
+                !this._bar.dock.ext.settings.get_strv('dock-separators').includes(this.app.get_id());
+        }
+        this._menu.open(BoxPointer.PopupAnimation.FULL);
+    }
+});
+
+// User separator placed after the pinned app `anchor`. Drag to move, drag off the dock or
+// right-click > Remove to delete. Positions live in the `dock-separators` setting.
+const DockSeparator = GObject.registerClass(
+class DockSeparator extends St.Widget {
+    _init(bar, anchor) {
+        super._init({
+            style_class: 'mydock-user-separator',
+            reactive: true,
+            track_hover: true,
+            y_align: Clutter.ActorAlign.CENTER,
+            layout_manager: new Clutter.BinLayout(),
+        });
+        this._bar = bar;
+        this.anchor = anchor;
+        this.shift = 0;
+        // the line is 1px; its CSS margins make the grab area
+        this.add_child(new St.Widget({style_class: 'mydock-separator', height: Math.round(bar.geom.S * 0.8)}));
+
+        this._delegate = this;
+        this._draggable = DND.makeDraggable(this);
+        this._draggable.connect('drag-begin', () => {
+            bar.hideLabel();
+            this.opacity = 90;
+            bar.dock.setDragging(true);
+        });
+        this._draggable.connect('drag-cancelled', () => bar.dock.onDragCancelled(this));
+        this._draggable.connect('drag-end', () => {
+            this.opacity = 255;
+            bar.dock.clearDropGaps();
+            bar.dock.setDragging(false);
+        });
+        this.connect('button-release-event', (_a, ev) => {
+            if (ev.get_button() !== Clutter.BUTTON_SECONDARY)
+                return Clutter.EVENT_PROPAGATE;
+            this._popupMenu();
+            return Clutter.EVENT_STOP;
+        });
+        this.connect('destroy', () => {
+            this._menu?.destroy();
+            this._menu = null;
+        });
+    }
+
+    get menuOpen() {
+        return !!this._menu?.isOpen;
+    }
+
+    getDragActor() {
+        return new St.Widget({style_class: 'mydock-separator', height: Math.round(this._bar.geom.S * 0.8)});
+    }
+
+    _popupMenu() {
+        if (!this._menu) {
+            this._menu = new PopupMenu.PopupMenu(this, 0.5, St.Side.BOTTOM);
+            this._menu.addAction('Remove Separator', () => this._bar.dock.removeSeparator(this.anchor));
             this._menu.actor.add_style_class_name('mydock-menu');
             this._menu.connect('open-state-changed', () => this._bar.dock.queueHideCheck());
             Main.uiGroup.add_child(this._menu.actor);
@@ -244,41 +332,107 @@ function makeCalendarIcon(M) {
     return w;
 }
 
-// Live analog clock icon drawn with cairo.
+// Rounded square app tile, inset like themed icons so it lines up with its neighbours.
+// Leaves the cairo origin at the tile center and returns the tile size.
+function drawTile(cr, w, h, top, bottom) {
+    const s = Math.min(w, h) * 0.88;
+    const x = (w - s) / 2, y = (h - s) / 2, r = s * 0.22;
+    cr.newSubPath();
+    cr.arc(x + s - r, y + r, r, -Math.PI / 2, 0);
+    cr.arc(x + s - r, y + s - r, r, 0, Math.PI / 2);
+    cr.arc(x + r, y + s - r, r, Math.PI / 2, Math.PI);
+    cr.arc(x + r, y + r, r, Math.PI, 1.5 * Math.PI);
+    cr.closePath();
+    const g = new Cairo.LinearGradient(0, y, 0, y + s);
+    g.addColorStopRGB(0, ...top);
+    g.addColorStopRGB(1, ...bottom);
+    cr.setSource(g);
+    cr.fill();
+    cr.translate(w / 2, h / 2);
+    return s;
+}
+
+// Launchpad icon: white rocket flying up-right on a navy tile.
+function makeLaunchpadIcon() {
+    const area = new St.DrawingArea({style_class: 'mydock-launchpad-icon'});
+    area.connect('repaint', () => {
+        const cr = area.get_context();
+        const [w, h] = area.get_surface_size();
+        const s = drawTile(cr, w, h, [0.16, 0.33, 0.68], [0.05, 0.16, 0.42]);
+        cr.rotate(Math.PI / 4);
+        cr.scale(s, s);
+        cr.setSourceRGBA(1, 1, 1, 1);
+        // body
+        cr.moveTo(0, -0.36);
+        cr.curveTo(0.13, -0.26, 0.14, -0.06, 0.1, 0.14);
+        cr.lineTo(-0.1, 0.14);
+        cr.curveTo(-0.14, -0.06, -0.13, -0.26, 0, -0.36);
+        cr.fill();
+        // fins
+        for (const d of [-1, 1]) {
+            cr.moveTo(d * 0.1, -0.02);
+            cr.lineTo(d * 0.21, 0.12);
+            cr.lineTo(d * 0.2, 0.22);
+            cr.lineTo(d * 0.08, 0.14);
+            cr.closePath();
+            cr.fill();
+        }
+        // exhaust
+        cr.setSourceRGBA(1, 1, 1, 0.9);
+        cr.moveTo(-0.06, 0.18);
+        cr.lineTo(0.06, 0.18);
+        cr.lineTo(0, 0.33);
+        cr.closePath();
+        cr.fill();
+        // window
+        cr.setSourceRGBA(0.1, 0.24, 0.55, 1);
+        cr.arc(0, -0.12, 0.045, 0, 2 * Math.PI);
+        cr.fill();
+        cr.$dispose();
+    });
+    return area;
+}
+
+// Live analog clock icon: black face with white numerals on a dark tile, orange seconds hand.
 function makeClockIcon() {
     const area = new St.DrawingArea({style_class: 'mydock-clock'});
     area.connect('repaint', () => {
         const cr = area.get_context();
         const [w, h] = area.get_surface_size();
-        const r = Math.min(w, h) / 2 - 1;
+        const s = drawTile(cr, w, h, [0.2, 0.2, 0.21], [0.1, 0.1, 0.11]);
+        const r = s * 0.45;
         const now = GLib.DateTime.new_now_local();
-        cr.translate(w / 2, h / 2);
         cr.arc(0, 0, r, 0, 2 * Math.PI);
-        cr.setSourceRGBA(0.1, 0.1, 0.1, 1);
-        cr.fillPreserve();
-        cr.setSourceRGBA(0.97, 0.97, 0.97, 1);
-        cr.arc(0, 0, r * 0.9, 0, 2 * Math.PI);
+        cr.setSourceRGBA(0, 0, 0, 1);
         cr.fill();
-        cr.setSourceRGBA(0.1, 0.1, 0.1, 1);
-        for (let i = 0; i < 12; i++) {
-            const a = i * Math.PI / 6;
-            cr.setLineWidth(r * (i % 3 ? 0.03 : 0.06));
-            cr.moveTo(Math.sin(a) * r * 0.72, -Math.cos(a) * r * 0.72);
-            cr.lineTo(Math.sin(a) * r * 0.82, -Math.cos(a) * r * 0.82);
-            cr.stroke();
+
+        cr.setSourceRGBA(1, 1, 1, 1);
+        cr.selectFontFace('Sans', Cairo.FontSlant.NORMAL, Cairo.FontWeight.BOLD);
+        cr.setFontSize(r * 0.3);
+        for (let n = 1; n <= 12; n++) {
+            const a = n * Math.PI / 6;
+            const t = cr.textExtents(`${n}`);
+            cr.moveTo(Math.sin(a) * r * 0.78 - t.width / 2 - t.xBearing,
+                -Math.cos(a) * r * 0.78 - t.height / 2 - t.yBearing);
+            cr.showText(`${n}`);
         }
-        cr.setLineCap(1); // ROUND
-        const hand = (angle, len, width) => {
+
+        cr.setLineCap(Cairo.LineCap.ROUND);
+        const hand = (angle, len, width, tail = 0) => {
             cr.setLineWidth(r * width);
-            cr.moveTo(0, 0);
+            cr.moveTo(-Math.sin(angle) * r * tail, Math.cos(angle) * r * tail);
             cr.lineTo(Math.sin(angle) * r * len, -Math.cos(angle) * r * len);
             cr.stroke();
         };
         const min = now.get_minute();
-        hand((now.get_hour() % 12 + min / 60) * Math.PI / 6, 0.45, 0.08);
-        hand(min * Math.PI / 30, 0.68, 0.05);
-        cr.setSourceRGBA(0.9, 0.3, 0.1, 1);
-        cr.arc(0, 0, r * 0.06, 0, 2 * Math.PI);
+        hand((now.get_hour() % 12 + min / 60) * Math.PI / 6, 0.45, 0.09);
+        hand((min + now.get_second() / 60) * Math.PI / 30, 0.72, 0.07);
+        cr.setSourceRGBA(1, 0.58, 0, 1);
+        hand(now.get_second() * Math.PI / 30, 0.8, 0.025, 0.2);
+        cr.arc(0, 0, r * 0.07, 0, 2 * Math.PI);
+        cr.fill();
+        cr.setSourceRGBA(0, 0, 0, 1);
+        cr.arc(0, 0, r * 0.03, 0, 2 * Math.PI);
         cr.fill();
         cr.$dispose();
     });
@@ -309,6 +463,7 @@ class DockBar {
         this.autohide = s.get_boolean('autohide');
         this.hidden = false;
         this._items = new Map(); // app id -> DockItem
+        this._seps = new Map(); // anchor app id -> DockSeparator
         this._specials = [];
         this._pointerX = null;
         this._dropIndex = null;
@@ -327,7 +482,12 @@ class DockBar {
             height: this.geom.H + E,
         });
 
-        this._bg = new St.Widget({layout_manager: new Clutter.BinLayout()});
+        // placed by _frame() from the box allocation (fixed position, natural size)
+        this._bg = new St.Widget({
+            layout_manager: new Clutter.BinLayout(),
+            x_align: Clutter.ActorAlign.START,
+            y_align: Clutter.ActorAlign.START,
+        });
         this._tint = new St.Widget({style_class: 'mydock-bg', x_expand: true, y_expand: true});
         this._bg.add_child(this._tint);
         this.actor.add_child(this._bg);
@@ -344,13 +504,16 @@ class DockBar {
         this.box._delegate = this;
         this.actor.add_child(this.box);
 
-        // Background follows the box; offsets widen it while magnifying / showing a drop gap.
-        this._bindX = new Clutter.BindConstraint({source: this.box, coordinate: Clutter.BindCoordinate.X});
-        this._bindW = new Clutter.BindConstraint({source: this.box, coordinate: Clutter.BindCoordinate.WIDTH});
-        this._bg.add_constraint(this._bindX);
-        this._bg.add_constraint(this._bindW);
-        this._bg.add_constraint(new Clutter.BindConstraint({source: this.box, coordinate: Clutter.BindCoordinate.Y}));
-        this._bg.add_constraint(new Clutter.BindConstraint({source: this.box, coordinate: Clutter.BindCoordinate.HEIGHT}));
+        // Background follows the box from _frame(). Not BindConstraints: _bg is allocated before
+        // the box, so a relayout bound it to the box's stale allocation and it stayed off to the side.
+        this.box.connect('notify::allocation', () => {
+            const b = this.box;
+            const key = `${b.x},${b.y},${b.width},${b.height}`;
+            if (key !== this._boxKey) {
+                this._boxKey = key;
+                this._kick();
+            }
+        });
 
         this.box.connect('motion-event', (_a, ev) => {
             const [x, y] = ev.get_coords();
@@ -397,7 +560,7 @@ class DockBar {
 
     get hovered() {
         return this.box.hover || !!this._strip?.hover ||
-            [...this._items.values(), ...this._specials].some(i => i.menuOpen);
+            [...this._items.values(), ...this._specials, ...this._seps.values()].some(i => i.menuOpen);
     }
 
     _buildSpecials() {
@@ -407,7 +570,9 @@ class DockBar {
         const themed = (id, names) => new St.Icon({gicon: ext.iconOverride(id) ?? new Gio.ThemedIcon({names}), icon_size: M});
 
         if (s.get_boolean('show-launchpad')) {
-            this._specials.push(new DockItem(this, themed('launchpad', ['launchpad', 'view-app-grid-symbolic']), {
+            const gicon = ext.iconOverride('launchpad');
+            const icon = gicon ? new St.Icon({gicon, icon_size: M}) : makeLaunchpadIcon();
+            this._specials.push(new DockItem(this, icon, {
                 label: 'Launchpad',
                 onClick: () => ext.launchpad?.toggle(),
             }));
@@ -421,6 +586,10 @@ class DockBar {
         }
         if (s.get_boolean('show-clock')) {
             this._clock = makeClockIcon();
+            this._secondsId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
+                this._clock.update();
+                return GLib.SOURCE_CONTINUE;
+            });
             this._specials.push(new DockItem(this, this._clock, {
                 label: 'Clock',
                 onClick: () => launchAppId(CLOCKS_ID),
@@ -493,7 +662,7 @@ class DockBar {
             this._blur.radius = radius;
     }
 
-    // Rebuild the children order: pinned, running, separator, specials.
+    // Rebuild the children order: pinned (+ user separators), running, separator, specials.
     setApps(pinned, running) {
         const want = [...pinned, ...running];
         const ids = new Set(want.map(a => a.get_id()));
@@ -501,6 +670,14 @@ class DockBar {
             if (!ids.has(id)) {
                 item.destroy();
                 this._items.delete(id);
+            }
+        }
+        const pinnedIds = new Set(pinned.map(a => a.get_id()));
+        const anchors = new Set(this.dock.ext.settings.get_strv('dock-separators'));
+        for (const [id, sep] of this._seps) {
+            if (!anchors.has(id) || !pinnedIds.has(id)) {
+                sep.destroy();
+                this._seps.delete(id);
             }
         }
         const children = [];
@@ -518,6 +695,15 @@ class DockBar {
             item.pinned = pinnedSet.has(app);
             item.sync();
             children.push(item);
+            const id = app.get_id();
+            if (item.pinned && anchors.has(id)) {
+                let sep = this._seps.get(id);
+                if (!sep) {
+                    sep = new DockSeparator(this, id);
+                    this._seps.set(id, sep);
+                }
+                children.push(sep);
+            }
         }
         if (this._separator)
             children.push(this._separator, ...this._specials);
@@ -525,10 +711,18 @@ class DockBar {
         const current = this.box.get_children();
         if (current.length === children.length && current.every((c, i) => c === children[i]))
             return;
-        for (const c of current)
-            this.box.remove_child(c);
-        for (const c of children)
-            this.box.add_child(c);
+        // move only what changed: re-adding every child unmaps it and kills running eases (bounce)
+        const keep = new Set(children);
+        for (const c of current) {
+            if (!keep.has(c))
+                this.box.remove_child(c);
+        }
+        children.forEach((c, i) => {
+            if (c.get_parent() !== this.box)
+                this.box.insert_child_at_index(c, i);
+            else if (this.box.get_child_at_index(i) !== c)
+                this.box.set_child_at_index(c, i);
+        });
         this._kick();
     }
 
@@ -611,6 +805,18 @@ class DockBar {
     }
 
     handleDragOver(source, _actor, x) {
+        if (source instanceof DockSeparator) {
+            const {index} = this._dropPos(x);
+            if (!index) {
+                this.clearDropGap();
+                return DND.DragMotionResult.NO_DROP;
+            }
+            if (this._dropIndex !== index) {
+                this._dropIndex = index;
+                this._kick();
+            }
+            return DND.DragMotionResult.MOVE_DROP;
+        }
         const app = appFromSource(source);
         if (!app || app.is_window_backed() || !global.settings.is_writable('favorite-apps'))
             return DND.DragMotionResult.NO_DROP;
@@ -624,6 +830,14 @@ class DockBar {
     }
 
     acceptDrop(source, _actor, x) {
+        if (source instanceof DockSeparator) {
+            const {index, pinned} = this._dropPos(x);
+            this.clearDropGap();
+            if (!index)
+                return false;
+            this.dock.moveSeparator(source.anchor, pinned[index - 1].app.get_id());
+            return true;
+        }
         const app = appFromSource(source);
         if (!app || app.is_window_backed() || !global.settings.is_writable('favorite-apps'))
             return false;
@@ -705,8 +919,9 @@ class DockBar {
             if (kid instanceof DockItem)
                 kid.applyScale(kid.scaleCur);
         }
-        this._bindX.offset = -(total + this._gapCur) / 2;
-        this._bindW.offset = total + this._gapCur;
+        const grow = total + this._gapCur;
+        this._bg.set_position(Math.round(this.box.x - grow / 2), this.box.y);
+        this._bg.set_size(Math.round(this.box.width + grow), this.box.height);
 
         if (this._label.visible)
             this._placeLabel();
@@ -715,6 +930,8 @@ class DockBar {
 
     destroy() {
         this._timeline.stop();
+        if (this._secondsId)
+            GLib.source_remove(this._secondsId);
         this._wallClock?.run_dispose();
         this._wallClock = null;
         this._trashMonitor?.cancel();
@@ -724,6 +941,8 @@ class DockBar {
         for (const item of [...this._items.values(), ...this._specials])
             item.destroy();
         this._items.clear();
+        this._seps.forEach(s => s.destroy());
+        this._seps.clear();
         this._specials = [];
         this._separator?.destroy();
         this.actor.destroy();
@@ -735,6 +954,7 @@ export class Dock {
         this.ext = ext;
         this._bars = [];
         this._runningOrder = [];
+        this._dragging = false;
         this._favs = AppFavorites.getAppFavorites();
         this._appSystem = Shell.AppSystem.get_default();
 
@@ -757,7 +977,7 @@ export class Dock {
                 this._rebuild();
             else if (key === 'blur' || key === 'opacity')
                 this._bars.forEach(b => b.restyle());
-            else if (key === 'bounce-on-launch' || key === 'show-labels')
+            else if (key === 'bounce-on-launch' || key === 'show-labels' || key === 'dock-separators')
                 this._refresh();
         }, this);
 
@@ -862,10 +1082,11 @@ export class Dock {
         this._bars.forEach(b => b.clearDropGap());
     }
 
-    // Dragging a pinned icon out of the dock and releasing it unpins it.
+    // Dragging a pinned icon (or a separator) out of the dock and releasing it removes it.
     onDragCancelled(item) {
         const ev = Clutter.get_current_event();
-        if (!item.pinned || ev?.type() !== Clutter.EventType.BUTTON_RELEASE)
+        const sep = item instanceof DockSeparator;
+        if ((!sep && !item.pinned) || ev?.type() !== Clutter.EventType.BUTTON_RELEASE)
             return;
         const [px, py] = global.get_pointer();
         const over = this._bars.some(b => {
@@ -874,11 +1095,44 @@ export class Dock {
         });
         if (over)
             return;
+        if (sep) {
+            this.removeSeparator(item.anchor);
+            return;
+        }
         const id = item.app.get_id();
         global.compositor.get_laters().add(Meta.LaterType.BEFORE_REDRAW, () => {
             this._favs.removeFavorite(id);
             return GLib.SOURCE_REMOVE;
         });
+    }
+
+    // A dock drag grabs the pointer, so the box loses hover: keep an auto-hidden dock up meanwhile.
+    setDragging(dragging) {
+        this._dragging = dragging;
+        if (!dragging)
+            this.queueHideCheck();
+    }
+
+    // Separator edits run before the next redraw: they rebuild the bars, which may destroy
+    // the separator a running drag still references.
+    _editSeparators(fn) {
+        global.compositor.get_laters().add(Meta.LaterType.BEFORE_REDRAW, () => {
+            const s = this.ext.settings;
+            s.set_strv('dock-separators', [...new Set(fn(s.get_strv('dock-separators')))]);
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    addSeparator(id) {
+        this._editSeparators(list => [...list, id]);
+    }
+
+    removeSeparator(id) {
+        this._editSeparators(list => list.filter(a => a !== id));
+    }
+
+    moveSeparator(from, to) {
+        this._editSeparators(list => [...list.filter(a => a !== from), to]);
     }
 
     // Intellihide: hide a bar when the focused window on its monitor overlaps it.
@@ -911,7 +1165,7 @@ export class Dock {
     }
 
     _shouldHide(bar) {
-        if (!bar.autohide || Main.overview.visible || bar.hovered)
+        if (!bar.autohide || this._dragging || Main.overview.visible || bar.hovered)
             return false;
         const win = this._focusWin;
         if (!win || win.minimized || win.get_monitor() !== bar.monitor.index ||
