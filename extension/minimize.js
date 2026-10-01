@@ -10,6 +10,7 @@
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
+import Graphene from 'gi://Graphene';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
@@ -17,44 +18,87 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {genieVertex, suckVertex, targetSide} from './deform-math.js';
 
-const EFFECT_NAME = 'mydock-minimize';
-const TILES = 20;       // mesh resolution for big windows
-const TILE_PX = 48;     // smaller windows get ~one tile per 48px (min 8): same curve, fewer vertex calls
+const STRIP_PX = 8;     // one mesh strip per ~8px of window
+const MIN_STRIPS = 24;
+const MAX_STRIPS = 96;
 const VERTEX = {genie: genieVertex, suck: suckVertex};
 const STAGE_MS = 380;       // Stage Manager fly-out (fixed: it is not the user's minimize effect)
 const STAGE_MAX_AGE = 2e6;  // us a recorded thumbnail rect stays valid for
 
-const DeformEffect = GObject.registerClass(
-class MyDockDeformEffect extends Clutter.DeformEffect {
-    _init(vertexFn, width, height, target) {
-        super._init();
+// Clutter.DeformEffect subclassed from GJS paints nothing on mutter 46, so the mesh is built
+// from clipped clones instead: the window is cut into thin strips across the funnel direction,
+// and every frame each strip is scaled and moved so its corners follow the vertex function.
+class StripMesh {
+    constructor(actor, vertexFn, width, height, target) {
         this._fn = vertexFn;
         this._w = width;
         this._h = height;
         this._t = target;
         this._side = targetSide(width, height, target);
-        this._progress = 0;
-        this._out = {x: 0, y: 0}; // reused by every vertex, no per-vertex allocation
-        const tiles = n => Math.max(8, Math.min(TILES, Math.ceil(n / TILE_PX)));
-        this.set_n_tiles(tiles(width), tiles(height));
+        // strips run across the direction the window travels (rows for a dock below/above)
+        this._rows = this._side === 'bottom' || this._side === 'top';
+        const len = this._rows ? height : width;
+        const n = Math.max(MIN_STRIPS, Math.min(MAX_STRIPS, Math.ceil(len / STRIP_PX)));
+        this._a = {x: 0, y: 0};
+        this._b = {x: 0, y: 0};
+        this.group = new Clutter.Actor({x: actor.x, y: actor.y});
+        this._strips = [];
+        for (let i = 0; i < n; i++) {
+            const s0 = i / n, s1 = (i + 1) / n;
+            const clone = new Clutter.Clone({source: actor, width, height, pivot_point: new Graphene.Point({x: 0, y: 0})});
+            // 1px overlap hides hairline seams between neighbouring strips
+            if (this._rows)
+                clone.set_clip(0, s0 * height, width, (s1 - s0) * height + 1);
+            else
+                clone.set_clip(s0 * width, 0, (s1 - s0) * width + 1, height);
+            this.group.add_child(clone);
+            this._strips.push([clone, s0, s1]);
+        }
+        global.window_group.insert_child_above(this.group, actor);
+    }
+
+    // point of the deformed window at progress p for texture coords (u, v)
+    _pt(p, u, v, out) {
+        return this._fn(p, u, v, this._w, this._h, this._t, this._side, out);
     }
 
     setProgress(p) {
-        this._progress = p;
-        this.invalidate();
+        const {_w: W, _h: H, _a: a, _b: b} = this;
+        for (const [clone, s0, s1] of this._strips) {
+            if (this._rows) {
+                // edges of the strip: average its top and bottom corners
+                this._pt(p, 0, s0, a);
+                const l0 = a.x, y0 = a.y;
+                this._pt(p, 1, s0, b);
+                const r0 = b.x, y0b = b.y;
+                this._pt(p, 0, s1, a);
+                this._pt(p, 1, s1, b);
+                const l = (l0 + a.x) / 2, r = (r0 + b.x) / 2;
+                const top = (y0 + y0b) / 2, bottom = (a.y + b.y) / 2;
+                const sy = (bottom - top) / ((s1 - s0) * H);
+                clone.set_scale(Math.max(0, (r - l) / W), Math.max(0, sy));
+                clone.set_translation(l, top - sy * s0 * H, 0);
+            } else {
+                this._pt(p, s0, 0, a);
+                const t0 = a.y, x0 = a.x;
+                this._pt(p, s0, 1, b);
+                const b0 = b.y, x0b = b.x;
+                this._pt(p, s1, 0, a);
+                this._pt(p, s1, 1, b);
+                const t = (t0 + a.y) / 2, bt = (b0 + b.y) / 2;
+                const left = (x0 + x0b) / 2, right = (a.x + b.x) / 2;
+                const sx = (right - left) / ((s1 - s0) * W);
+                clone.set_scale(Math.max(0, sx), Math.max(0, (bt - t) / H));
+                clone.set_translation(left - sx * s0 * W, t, 0);
+            }
+        }
     }
 
-    vfunc_deform_vertex(width, height, vertex) {
-        const r = this._fn(this._progress, vertex.tx, vertex.ty, this._w, this._h, this._t, this._side, this._out);
-        vertex.x = r.x * width / this._w;
-        vertex.y = r.y * height / this._h;
+    destroy() {
+        this.group.destroy();
+        this._strips = [];
     }
-
-    // the mesh leaves the actor bounds, so report an unknown volume (full repaint)
-    vfunc_modify_paint_volume(_volume) {
-        return false;
-    }
-});
+}
 
 export class MinimizeEffects {
     constructor(ext) {
@@ -131,6 +175,7 @@ export class MinimizeEffects {
         // register first so any later failure still ends in exactly one completed_*
         (minimizing ? Main.wm._minimizing : Main.wm._unminimizing).add(actor);
         let timeline = null;
+        let mesh = null;
         let destroyId = 0;
         const finish = () => {
             if (!this._active.delete(actor))
@@ -141,7 +186,8 @@ export class MinimizeEffects {
             }
             if (destroyId)
                 actor.disconnect(destroyId);
-            actor.remove_effect_by_name(EFFECT_NAME);
+            mesh?.destroy();
+            mesh = null;
             actor.set_translation(0, 0, 0);
             actor.rotation_angle_y = 0;
             // resets transitions, scale, opacity, pivot and calls completed_* once
@@ -202,17 +248,18 @@ export class MinimizeEffects {
             return;
         }
 
-        const deform = new DeformEffect(VERTEX[effect] ?? genieVertex, w, h, target);
-        actor.add_effect_with_name(EFFECT_NAME, deform);
+        mesh = new StripMesh(actor, VERTEX[effect] ?? genieVertex, w, h, target);
+        // the clones override the source opacity while painting, so this only hides the real window
+        actor.opacity = 0;
         // Timeline ignores the slow-down factor that ease() applies, so apply it here
         timeline = new Clutter.Timeline({actor, duration: Math.round(duration * St.Settings.get().slow_down_factor)});
         timeline.set_progress_mode(Clutter.AnimationMode.EASE_IN_OUT_SINE);
         const step = () => {
             const t = timeline.get_progress();
             const p = minimizing ? t : 1 - t;
-            deform.setProgress(p);
+            mesh.setProgress(p);
             // fade only at the very end so the window does not pop out of the icon
-            actor.opacity = Math.round(255 * (1 - clamp01((p - 0.85) / 0.15)));
+            mesh.group.opacity = Math.round(255 * (1 - clamp01((p - 0.85) / 0.15)));
         };
         step();
         timeline.connect('new-frame', step);
