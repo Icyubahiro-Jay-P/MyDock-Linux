@@ -15,6 +15,7 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as AppFavorites from 'resource:///org/gnome/shell/ui/appFavorites.js';
+import * as Background from 'resource:///org/gnome/shell/ui/background.js';
 import * as BoxPointer from 'resource:///org/gnome/shell/ui/boxpointer.js';
 import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
@@ -32,7 +33,6 @@ const REBUILD_KEYS = [
 const PILL_W = 500;          // the auto-hidden dock shrinks into a pill this size
 const PILL_H = 15;
 const PILL_GAP = 4;          // between the pill and the screen edge
-const BLUR_BANDS = 2;       // blur bands per rounded corner (see restyle)
 const HIDE_DELAY = 400; // ms before intellihide re-evaluates after pointer leaves
 const CALENDAR_ID = 'org.gnome.Calendar.desktop';
 const CLOCKS_ID = 'org.gnome.clocks.desktop';
@@ -46,57 +46,123 @@ function appFromSource(source) {
     return source?.app instanceof Shell.App ? source.app : null;
 }
 
-// Shell.BlurEffect can't round its corners (GNOME 46), so a rounded blur is made of horizontal
-// bands: a full-height middle band plus BLUR_BANDS bands per corner row, each inset to follow
-// the corner curve. The bands go into `parent` below `below` (the tinted, rounded widget).
-class RoundedBlur {
-    constructor(parent, below) {
-        this._parent = parent;
-        this._below = below;
-        this._bands = null;
-        this._key = null;
+// Rounded-rectangle alpha mask over a fixed strip. The rect comes in as uniforms, so moving or
+// resizing the dock only updates four floats: the texture size never changes (no reallocation
+// per magnify frame) and nothing below it is re-blurred.
+const MASK_DECL = 'uniform vec4 rect; uniform vec3 info;\n'; // rect x y w h, info strip w h + radius
+const MASK_CODE = `
+vec2 p = cogl_tex_coord_in[0].xy * info.xy - rect.xy - rect.zw * 0.5;
+vec2 q = abs(p) - (rect.zw * 0.5 - vec2(info.z));
+float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - info.z;
+cogl_color_out *= clamp(0.5 - d, 0.0, 1.0);
+`;
+const RoundedMask = GObject.registerClass(
+class MyDockRoundedMask extends Shell.GLSLEffect {
+    vfunc_build_pipeline() {
+        this.add_glsl_snippet(Shell.SnippetHook.FRAGMENT, MASK_DECL, MASK_CODE, false);
+    }
+
+    setShape(stripW, stripH, x, y, w, h, r) {
+        this._rectLoc ??= this.get_uniform_location('rect');
+        this._infoLoc ??= this.get_uniform_location('info');
+        this.set_uniform_float(this._rectLoc, 4, [x, y, w, h]);
+        this.set_uniform_float(this._infoLoc, 3, [stripW, stripH, r]);
+        this.queue_repaint();
+    }
+});
+
+// Dock background blur, two modes:
+//  wallpaper (default): the monitor's wallpaper, blurred once and cached by the ACTOR-mode
+//    effect, shown through a RoundedMask. Clean corners and nearly free per frame, but windows
+//    behind the dock are not part of it.
+//  live (blur-windows): one BACKGROUND-mode band filling the background. Blurs windows too,
+//    but GNOME 46 can't round it, so the four corner tips outside the curve stay blurred.
+class DockBlur {
+    constructor(bar) {
+        this._bar = bar;
+        this._mode = null; // null (off), 'live' or 'wallpaper'
     }
 
     // radius 0 removes the blur
-    set(radius) {
-        if (radius > 0 && !this._bands) {
-            this._bands = [];
-            for (let i = 0; i < 2 * BLUR_BANDS + 1; i++) {
-                const band = new St.Widget({x_align: Clutter.ActorAlign.START, y_align: Clutter.ActorAlign.START});
-                band.add_effect(new Shell.BlurEffect({mode: Shell.BlurMode.BACKGROUND, brightness: 1.0}));
-                this._parent.insert_child_below(band, this._below);
-                this._bands.push(band);
-            }
-        } else if (radius === 0 && this._bands) {
-            this._bands.forEach(b => b.destroy());
-            this._bands = null;
+    set(radius, live) {
+        const mode = radius > 0 ? (live ? 'live' : 'wallpaper') : null;
+        if (mode !== this._mode) {
+            this._teardown();
+            this._mode = mode;
+            if (mode === 'live')
+                this._buildLive();
+            else if (mode === 'wallpaper')
+                this._buildWallpaper();
         }
-        this._bands?.forEach(b => (b.get_effects()[0].radius = radius));
+        this._effect?.set({radius});
         this._key = null;
+        this.sync();
     }
 
-    layout(W, H, radius) {
-        if (!this._bands)
+    _buildLive() {
+        const {_bg: bg, _tint: tint} = this._bar;
+        this._band = new St.Widget({x_expand: true, y_expand: true}); // the BinLayout fills it
+        this._effect = new Shell.BlurEffect({mode: Shell.BlurMode.BACKGROUND, brightness: 1.0});
+        this._band.add_effect(this._effect);
+        bg.insert_child_below(this._band, tint);
+    }
+
+    _buildWallpaper() {
+        const bar = this._bar, mon = bar.monitor;
+        // monitor-sized, kept at the monitor origin (see sync); the strip clip limits painting
+        // and the mask texture to the dock's row
+        this._wrap = new St.Widget({width: mon.width, height: mon.height});
+        this._inner = new St.Widget({width: mon.width, height: mon.height});
+        this._effect = new Shell.BlurEffect({mode: Shell.BlurMode.ACTOR, brightness: 1.0});
+        this._inner.add_effect(this._effect);
+        this._wrap.add_child(this._inner);
+        this._mask = new RoundedMask();
+        this._wrap.add_effect(this._mask);
+        this._bgManager = new Background.BackgroundManager({
+            container: this._inner,
+            monitorIndex: mon.index,
+            layoutManager: Main.layoutManager,
+            controlPosition: false,
+            vignette: false,
+        });
+        bar.actor.insert_child_at_index(this._wrap, 0);
+        bar._bg.connectObject('notify::allocation', () => this.sync(), this);
+    }
+
+    // wallpaper mode: line the wallpaper up with the screen and the mask with the background.
+    // Runs after the background is allocated and whenever the bar's translation changes.
+    sync() {
+        if (this._mode !== 'wallpaper')
             return;
-        const r = Math.min(H / 2, W / 2, radius);
-        const key = `${W}x${H}x${r}`;
+        const bar = this._bar, mon = bar.monitor, actor = bar.actor;
+        const ty = actor.translation_y;
+        const box = bar._bg.get_allocation_box();
+        const w = box.get_width(), h = box.get_height();
+        const r = Math.min(bar._radius ?? 0, w / 2, h / 2);
+        const key = `${actor.x},${actor.y},${ty},${box.x1},${box.y1},${w},${h},${r}`;
         if (key === this._key)
             return;
         this._key = key;
-        const [mid, ...corners] = this._bands;
-        mid.set_position(0, Math.round(r));
-        mid.set_size(W, Math.max(0, H - 2 * Math.round(r)));
-        const step = r / BLUR_BANDS;
-        for (let i = 0; i < BLUR_BANDS; i++) {
-            // inset of the circle at the band's middle row, measured from the corner center
-            const dy = r - (i + 0.5) * step;
-            const inset = Math.round(r - Math.sqrt(Math.max(0, r * r - dy * dy)));
-            const y0 = Math.round(i * step), y1 = Math.round((i + 1) * step);
-            for (const [band, y] of [[corners[2 * i], y0], [corners[2 * i + 1], H - y1]]) {
-                band.set_position(inset, y);
-                band.set_size(Math.max(0, W - 2 * inset), y1 - y0);
-            }
-        }
+        // wrap origin = monitor origin whatever the bar's position or slide
+        this._wrap.set_position(mon.x - actor.x, mon.y - actor.y - ty);
+        // strip = the bar's full row, a constant size: the background stays inside it
+        const stripY = actor.y - mon.y + ty, stripH = actor.height;
+        this._wrap.set_clip(0, stripY, mon.width, stripH);
+        this._mask.setShape(mon.width, stripH, actor.x - mon.x + box.x1, box.y1, w, h, r);
+    }
+
+    _teardown() {
+        this._bar._bg.disconnectObject(this);
+        this._bgManager?.destroy();
+        this._wrap?.destroy();
+        this._band?.destroy();
+        this._bgManager = this._wrap = this._inner = this._mask = this._band = this._effect = null;
+        this._mode = null;
+    }
+
+    destroy() {
+        this._teardown();
+        this._bar = null;
     }
 }
 
@@ -596,7 +662,7 @@ class DockBar {
         this._bg.add_child(this._tint);
         this._pillTint = new St.Widget({style_class: 'mydock-hidden-pill', x_expand: true, y_expand: true, opacity: 0});
         this._bg.add_child(this._pillTint);
-        this._blur = new RoundedBlur(this._bg, this._tint);
+        this._blur = new DockBlur(this);
         this._morph = 0;   // 0 = full dock, 1 = shrunk into the hidden pill (animated in _frame)
         this._bg.connect('notify::hover', () => {
             if (this._bg.hover && this.hidden)
@@ -805,19 +871,17 @@ class DockBar {
             }, this);
             return;
         }
-        this._blur.set(radius);
-        this._layoutBlur();
+        this._layoutBlur(); // radius first: the wallpaper mask needs it
+        this._blur.set(radius, s.get_boolean('blur-windows'));
     }
 
-    _layoutBlur(W, H) {
-        if (W === undefined)
-            [W, H] = this._bg.get_size();
-        // cached: _frame() calls this every frame the background resizes
+    _layoutBlur() {
+        // cached themed corner radius (reset on style-changed)
         if (this._radius == null) {
             const node = this._tint.get_theme_node?.();
             this._radius = node ? node.get_border_radius(St.Corner.TOPLEFT) : 18;
         }
-        this._blur.layout(W, H, this._radius);
+        this._blur.sync();
     }
 
     // Rebuild the children order: pinned (+ user separators), running, separator, specials.
@@ -1122,14 +1186,14 @@ class DockBar {
         if (bgW !== this._bgW || bgH !== this._bgH) {
             this._bgW = bgW;
             this._bgH = bgH;
-            this._bg.set_size(bgW, bgH);
-            this._layoutBlur(bgW, bgH);
+            this._bg.set_size(bgW, bgH); // the wallpaper blur follows on notify::allocation
         }
         if (m !== this._lastM) {
             this._lastM = m;
             // the BinLayout centers the background vertically in the (H + E) tall actor, so the
             // pill's bottom edge lands PILL_GAP above the screen edge after this drop
             this.actor.translation_y = Math.round(((H + E - PILL_H) / 2 - PILL_GAP) * m);
+            this._blur.sync(); // a translation is no reallocation: keep the wallpaper still
             this.box.opacity = Math.round(255 * Math.max(0, 1 - 2 * m));
             this._tint.opacity = Math.round(this._tintOpacity * (1 - m));
             this._pillTint.opacity = Math.round(255 * m);
@@ -1161,6 +1225,7 @@ class DockBar {
         this._seps.clear();
         this._specials = [];
         this._separator?.destroy();
+        this._blur.destroy();
         this.actor.destroy();
     }
 }
@@ -1191,7 +1256,7 @@ export class Dock {
         ext.settings.connectObject('changed', (_s, key) => {
             if (REBUILD_KEYS.includes(key))
                 this._rebuild();
-            else if (key === 'blur' || key === 'opacity')
+            else if (key === 'blur' || key === 'opacity' || key === 'blur-windows')
                 this._bars.forEach(b => b.restyle());
             else if (key === 'bounce-on-launch' || key === 'show-labels' || key === 'dock-separators')
                 this._refresh();
