@@ -1010,7 +1010,9 @@ class DockBar {
         const pillW = Math.min(PILL_W, this.monitor.width * 0.6);
         const fullW = this.box.width + grow;
         this._bg.set_size(Math.round(fullW + (pillW - fullW) * m), Math.round(H + (PILL_H - H) * m));
-        this.actor.translation_y = Math.round((H + E - PILL_H - PILL_GAP) * m);
+        // the BinLayout centers the background vertically in the (H + E) tall actor, so the pill's
+        // bottom edge lands PILL_GAP above the screen edge after this drop
+        this.actor.translation_y = Math.round(((H + E - PILL_H) / 2 - PILL_GAP) * m);
         this.box.opacity = Math.round(255 * Math.max(0, 1 - 2 * m));
         this._tint.opacity = Math.round(this._tintOpacity * (1 - m));
         this._pillTint.opacity = Math.round(255 * m);
