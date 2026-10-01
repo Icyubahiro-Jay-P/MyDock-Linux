@@ -12,6 +12,7 @@ import {Dock} from './dock.js';
 import {FinderBar} from './finderbar.js';
 import {Launchpad} from './launchpad.js';
 import {StageManager} from './stagemanager.js';
+import {StatusMenus} from './statusmenus.js';
 import {MinimizeEffects} from './minimize.js';
 import {Updater} from './updater.js';
 import {WindowButtons} from './windowbuttons.js';
@@ -21,6 +22,7 @@ const FEATURES = [
     ['launchpad', Launchpad, null],
     ['dock', Dock, 'dock-enabled'],
     ['finderbar', FinderBar, 'finderbar-enabled'],
+    ['statusMenus', StatusMenus, 'finderbar-status-menus'],
     ['stageManager', StageManager, 'stage-manager'],
     ['minimize', MinimizeEffects, null],
     ['windowButtons', WindowButtons, 'window-buttons-left'],
