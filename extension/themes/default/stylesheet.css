@@ -35,6 +35,9 @@
   background-color: rgba(0, 0, 0, 0.25);
 }
 .mydock-dark .mydock-separator { background-color: rgba(255, 255, 255, 0.3); }
+/* user separators (drag to move): highlight the line on hover */
+.mydock-user-separator:hover .mydock-separator { background-color: rgba(0, 0, 0, 0.55); }
+.mydock-dark .mydock-user-separator:hover .mydock-separator { background-color: rgba(255, 255, 255, 0.7); }
 
 .mydock-label {
   padding: 4px 10px;
@@ -68,10 +71,29 @@
 .mydock-launchpad .overview-tile .overview-icon-label,
 .mydock-launchpad .app-well-app .overview-icon-label {
   color: #ffffff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  font-weight: bold;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
 }
 .mydock-launchpad .page-indicator .page-indicator-icon {
-  background-color: rgba(255, 255, 255, 0.8);
+  background-color: rgba(255, 255, 255, 0.85);
+}
+/* search field: dark translucent rounded box, top center */
+.mydock-launchpad .search-entry {
+  width: 400px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  color: #ffffff;
+  background-color: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: none;
+}
+.mydock-launchpad .search-entry:focus {
+  background-color: rgba(0, 0, 0, 0.45);
+  border-color: rgba(255, 255, 255, 0.55);
+}
+.mydock-launchpad .search-entry .search-entry-icon,
+.mydock-launchpad .search-entry StLabel.hint-text {
+  color: rgba(255, 255, 255, 0.7);
 }
 
 /* ---- finderbar ---- */
@@ -151,6 +173,13 @@
     font-feature-settings: "tnum";
 }
 
+/* Ctrl + drag insertion marker (lives in Main.uiGroup, outside #panel) */
+.mydock-finderbar-marker {
+    width: 2px;
+    border-radius: 1px;
+    background-color: #0a84ff;
+}
+
 /* ---- stagemanager ---- */
 /* Stage Manager strip (stagemanager.js) */
 .mydock-stage-strip {
@@ -166,7 +195,7 @@
 }
 
 .mydock-stage-group {
-    padding: 6px;
+    padding: 10px;
     border-radius: 12px;
     background-color: transparent;
     transition-duration: 150ms;
