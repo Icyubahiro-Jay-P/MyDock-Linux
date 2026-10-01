@@ -307,6 +307,8 @@ export class FinderBar {
         }
         for (const [key] of [...STATS].reverse())
             this._syncStat(key, true);
+        if (this._statsId)
+            this._updateStats(); // once for all, not per stat: back-to-back CPU reads give a bogus 0%
     }
 
     // a stat exists only while it is switched on and the system can provide it
@@ -363,7 +365,8 @@ export class FinderBar {
                 return GLib.SOURCE_CONTINUE;
             });
         }
-        this._updateStats();
+        if (!initial)
+            this._updateStats();
     }
 
     // leftmost stat container in the bar (left, center, right box order)
@@ -509,7 +512,9 @@ export class FinderBar {
     }
 
     _applyOrder() {
-        const order = this._settings.get_strv('finderbar-order');
+        // the stats used to be one item (mydock-stats): put the per-stat items in its slot
+        const order = this._settings.get_strv('finderbar-order').flatMap(e => e.endsWith(':mydock-stats')
+            ? STATS.map(([key]) => e.replace('mydock-stats', `mydock-stat-${key}`)) : [e]);
         if (!order.length || this._drag)
             return;
         this._applying = true;
