@@ -70,3 +70,78 @@
     border: 1px solid alpha(white, 0.45);
     box-shadow: 0 6px 18px alpha(black, 0.22);
 }
+
+/* Sidebar section headers (MyDock, MyFinder, ...) */
+.mydock-prefs .mydock-sidebar > row.mydock-sidebar-header-row {
+    min-height: 24px;
+    padding: 10px 8px 2px 8px;
+    background: none;
+}
+.mydock-prefs .mydock-sidebar-header {
+    font-size: 9pt;
+    font-weight: 600;
+    opacity: 0.55;
+}
+
+/* Traffic-light window controls: grey, colored while the pointer is over them.
+   The :not()s outrank Adwaita's headerbar button rules. */
+.mydock-prefs .mydock-dots > button.mydock-dot:not(.suggested-action):not(.destructive-action) {
+    min-width: 12px;
+    min-height: 12px;
+    padding: 0;
+    margin: 0;
+    border-radius: 9999px;
+    background-color: alpha(currentColor, 0.25);
+    box-shadow: none;
+}
+.mydock-prefs .mydock-dots:hover > button.mydock-dot-close:not(.suggested-action):not(.destructive-action)    { background-color: #ff5f57; }
+.mydock-prefs .mydock-dots:hover > button.mydock-dot-minimize:not(.suggested-action):not(.destructive-action) { background-color: #febc2e; }
+.mydock-prefs .mydock-dots:hover > button.mydock-dot-maximize:not(.suggested-action):not(.destructive-action) { background-color: #28c840; }
+
+/* Group titles sit inside the card, like the reference */
+.mydock-prefs preferencesgroup:not(.mydock-plain) > box {
+    padding: 14px 16px 16px 16px;
+    border-radius: 12px;
+    background-color: @card_bg_color;
+    box-shadow: 0 0 0 1px alpha(currentColor, 0.06);
+}
+.mydock-prefs preferencesgroup:not(.mydock-plain) .boxed-list {
+    background: none;
+    box-shadow: none;
+}
+.mydock-prefs preferencesgroup:not(.mydock-plain) .boxed-list > row {
+    padding-left: 0;
+    padding-right: 0;
+    border-radius: 0;
+}
+.mydock-prefs preferencesgroup:not(.mydock-plain) .boxed-list > row:hover {
+    background: none;
+}
+
+/* Appearance picker */
+.mydock-prefs button.mydock-appearance {
+    padding: 4px;
+    border-radius: 10px;
+}
+.mydock-prefs .mydock-appearance .mydock-thumb {
+    border-radius: 8px;
+    box-shadow: 0 0 0 1px alpha(black, 0.15);
+}
+.mydock-prefs button.flat.mydock-appearance:checked,
+.mydock-prefs button.flat.mydock-appearance:checked:hover {
+    background-color: transparent;
+}
+.mydock-prefs .mydock-appearance:checked .mydock-thumb {
+    box-shadow: 0 0 0 3px @accent_bg_color;
+}
+.mydock-prefs .mydock-thumb-light { background-image: linear-gradient(160deg, #d9e6ff, #9db8f0); }
+.mydock-prefs .mydock-thumb-dark  { background-image: linear-gradient(160deg, #1b2a55, #3c2a7a); }
+.mydock-prefs .mydock-thumb-auto  { background-image: linear-gradient(135deg, #b8ccf5 50%, #26306a 50%); }
+.mydock-prefs .mydock-thumb-window { border-radius: 4px; }
+.mydock-prefs .mydock-thumb-dock   { border-radius: 4px; }
+.mydock-prefs .mydock-thumb-light .mydock-thumb-window,
+.mydock-prefs .mydock-thumb-light .mydock-thumb-dock,
+.mydock-prefs .mydock-thumb-auto .mydock-thumb-window { background-color: alpha(white, 0.85); }
+.mydock-prefs .mydock-thumb-dark .mydock-thumb-window,
+.mydock-prefs .mydock-thumb-dark .mydock-thumb-dock,
+.mydock-prefs .mydock-thumb-auto .mydock-thumb-dock { background-color: alpha(#2c2c30, 0.9); }
