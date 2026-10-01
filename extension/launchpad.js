@@ -226,9 +226,12 @@ export class Launchpad {
         this._visible = (q ? this._apps.filter(match) : this._apps).map(a => this._tiles.get(a));
 
         // hide / show instead of remove / re-add: re-parenting restyles every tile
+        // non-matching tiles hide here; _goto() -> _syncPageVisibility() shows the matching ones near the page
         const shown = new Set(this._visible);
-        for (const t of this._tiles.values())
-            t.visible = shown.has(t);
+        for (const t of this._tiles.values()) {
+            if (!shown.has(t))
+                t.visible = false;
+        }
         const {width: W, height: H} = this._grid;
         const cw = W / COLS, ch = H / ROWS;
         this._visible.forEach((tile, i) => {
@@ -256,8 +259,20 @@ export class Launchpad {
         this._dots.set_position(Math.round((this._mon.width - w) / 2), this._dotsY);
     }
 
+    // Only tiles on pages lo-1 .. hi+1 are visible, so off-screen pages are not painted or picked.
+    _syncPageVisibility(lo, hi) {
+        this._visible.forEach((tile, i) => {
+            const page = Math.floor(i / PER_PAGE);
+            tile.visible = page >= lo - 1 && page <= hi + 1;
+        });
+    }
+
     _goto(page, animate) {
+        const prev = this._page;
         this._page = Math.max(0, Math.min(this._pages - 1, page));
+        // while sliding, every page the strip passes stays visible; trimmed back once it lands
+        const target = this._page;
+        this._syncPageVisibility(animate ? Math.min(prev, target) : target, animate ? Math.max(prev, target) : target);
         this._dots.get_children().forEach((d, i) => {
             if (i === this._page)
                 d.add_style_pseudo_class('checked');
@@ -267,7 +282,12 @@ export class Launchpad {
         const x = -this._page * this._grid.width;
         this._strip.remove_transition('translation-x');
         if (animate)
-            this._strip.ease({translation_x: x, duration: PAGE_MS, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
+            this._strip.ease({
+                translation_x: x,
+                duration: PAGE_MS,
+                mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+                onComplete: () => this._syncPageVisibility(target, target),
+            });
         else
             this._strip.translation_x = x;
     }
