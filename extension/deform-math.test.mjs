@@ -50,6 +50,13 @@ for (const [where, T] of Object.entries(targets)) {
     }
 }
 
+// mid-animation the bottom row is pinched far narrower than the top row
+for (const [name, fn] of [['genie', genieVertex], ['suck', suckVertex]]) {
+    const T = targets.bottom;
+    const rowWidth = v => fn(0.5, 1, v, W, H, T).x - fn(0.5, 0, v, W, H, T).x;
+    assert.ok(rowWidth(1) < 0.35 * rowWidth(0), `${name} bottom narrower: ${rowWidth(1)} vs ${rowWidth(0)}`);
+}
+
 assert.equal(targetSide(W, H, targets.bottom), 'bottom');
 assert.equal(targetSide(W, H, targets.top), 'top');
 assert.equal(targetSide(W, H, targets.left), 'left');
