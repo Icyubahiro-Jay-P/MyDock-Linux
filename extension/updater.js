@@ -39,6 +39,11 @@ export class Updater {
     constructor(ext) {
         this._ext = ext;
         this._cancel = new Gio.Cancellable();
+        // The About page's "Update Now" resets last-update-check to 0: check right away.
+        this._sig = ext.settings.connect('changed::last-update-check', s => {
+            if (s.get_int64('last-update-check') === 0)
+                this._check(true);
+        });
         this._schedule(FIRST_DELAY);
     }
 
@@ -51,10 +56,10 @@ export class Updater {
         });
     }
 
-    _check() {
+    _check(manual = false) {
         const s = this._ext.settings;
         const now = Math.floor(Date.now() / 1000);
-        if (now - s.get_int64('last-update-check') < DAY)
+        if (!manual && (!s.get_boolean('check-updates') || now - s.get_int64('last-update-check') < DAY))
             return;
         this._session ??= new Soup.Session({user_agent: `MyDock/${this._ext.metadata['version-name']}`, timeout: 15});
         const msg = Soup.Message.new('GET', API);
@@ -147,6 +152,7 @@ export class Updater {
 
     destroy() {
         this._cancel.cancel();
+        this._ext.settings.disconnect(this._sig);
         if (this._timer)
             GLib.source_remove(this._timer);
         this._source?.destroy();
