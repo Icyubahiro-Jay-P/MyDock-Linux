@@ -1,6 +1,6 @@
 // MyDock - Launchpad. Reuses GNOME's app grid: opens the overview straight into
-// the apps view, hides the search entry / workspace strip / dash and puts a
-// blurred wallpaper behind it. Everything is restored when the overview hides.
+// the apps view as a 7 x 5 grid under a search field, hides the workspace strip
+// and dash and puts a blurred wallpaper behind it. Everything is restored when the overview hides.
 
 import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
@@ -9,6 +9,8 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Background from 'resource:///org/gnome/shell/ui/background.js';
+
+const GRID_MODES = [{rows: 5, columns: 7}];
 
 export class Launchpad {
     constructor(ext) {
@@ -44,11 +46,19 @@ export class Launchpad {
 
         // private shell actors; tolerate them missing on other shell versions
         const c = Main.overview._overview?.controls;
-        this._hidden = [c?._searchEntryBin, c?._workspacesDisplay, c?.dash]
+        this._hidden = [c?._workspacesDisplay, c?.dash]
             .filter(Boolean)
             .map(a => [a, a.opacity]);
         for (const [a] of this._hidden)
             a.opacity = 0;
+
+        // fixed 7 x 5 pages like macOS; _currentMode reset so the new mode applies even at index 0
+        this._grid = c?._appDisplay?._grid;
+        if (this._grid?.setGridModes) {
+            this._gridModes = this._grid._gridModes;
+            this._grid._currentMode = -1;
+            this._grid.setGridModes(GRID_MODES);
+        }
 
         // blurred wallpaper under the app grid
         this._bg = new St.Widget({
@@ -64,7 +74,7 @@ export class Launchpad {
             monitorIndex: m.index,
             vignette: false,
         }));
-        this._bg.add_effect(new Shell.BlurEffect({mode: Shell.BlurMode.ACTOR, radius: 60, brightness: 0.7}));
+        this._bg.add_effect(new Shell.BlurEffect({mode: Shell.BlurMode.ACTOR, radius: 60, brightness: 0.55}));
         group.insert_child_at_index(this._bg, 0);
         this._bg.ease({opacity: 255, duration: 250, mode: Clutter.AnimationMode.EASE_OUT_QUAD});
     }
@@ -77,6 +87,11 @@ export class Launchpad {
         for (const [a, opacity] of this._hidden)
             a.opacity = opacity;
         this._hidden = [];
+        if (this._grid) {
+            this._grid._currentMode = -1;
+            this._grid.setGridModes(this._gridModes);
+            this._grid = this._gridModes = null;
+        }
         this._bgManagers.forEach(m => m.destroy());
         this._bgManagers = [];
         this._bg.destroy();
