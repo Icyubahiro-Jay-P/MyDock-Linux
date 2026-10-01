@@ -607,3 +607,223 @@
   font-weight: bold;
   font-size: 9pt;
 }
+
+/* ---- statusmenus ---- */
+/* Status items (statusmenus.js). Menu chrome comes from .mydock-menu (finderbar); only widgets here. */
+
+#panel.mydock-finderbar .mydock-status-button {
+    -natural-hpadding: 7px;
+    -minimum-hpadding: 3px;
+}
+.mydock-status-box {
+    spacing: 4px;
+}
+.mydock-battery-label {
+    font-size: 9pt;
+    font-weight: bold;
+    font-feature-settings: "tnum";
+}
+
+.mydock-status-menu .popup-menu-content {
+    min-width: 260px;
+}
+.mydock-status-heading,
+.mydock-status-title {
+    font-weight: bold;
+}
+.mydock-status-heading {
+    font-size: 9.5pt;
+    padding-top: 4px;
+    padding-bottom: 2px;
+}
+.mydock-status-heading.popup-inactive-menu-item {
+    color: inherit; /* keep headings readable, not greyed out */
+}
+
+/* rows with a round icon chip; the chip turns blue when the row is the active one */
+.mydock-status-row {
+    spacing: 10px;
+    font-weight: bold;
+}
+.mydock-chip {
+    width: 26px;
+    height: 26px;
+    border-radius: 13px;
+}
+.mydock-chip-icon {
+    icon-size: 14px;
+}
+.mydock-dark .mydock-chip { background-color: rgba(255, 255, 255, 0.14); color: #f5f5f7; }
+.mydock-light .mydock-chip { background-color: rgba(0, 0, 0, 0.08); color: #1d1d1f; }
+.mydock-chip:checked,
+.mydock-dark .mydock-chip:checked,
+.mydock-light .mydock-chip:checked {
+    background-color: #0a84ff;
+    color: #ffffff;
+}
+.mydock-row-trailing {
+    icon-size: 12px;
+    opacity: 0.7;
+}
+
+/* thick pill sliders (brightness, volume) */
+.mydock-slider-row {
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+.mydock-slider {
+    -barlevel-height: 22px;
+    -barlevel-border-width: 0;
+    -slider-handle-radius: 11px;
+    -slider-handle-border-width: 1px;
+    -barlevel-active-background-color: #ffffff;
+    color: #ffffff;
+}
+.mydock-dark .mydock-slider {
+    -barlevel-background-color: rgba(255, 255, 255, 0.14);
+    -slider-handle-border-color: rgba(0, 0, 0, 0.25);
+}
+.mydock-light .mydock-slider {
+    -barlevel-background-color: rgba(0, 0, 0, 0.1);
+    -slider-handle-border-color: rgba(0, 0, 0, 0.18);
+}
+
+/* account */
+.mydock-account-box {
+    spacing: 10px;
+    padding: 6px 0;
+}
+.mydock-account-avatar {
+    icon-size: 56px;
+    border-radius: 999px;
+}
+.mydock-dark .mydock-account-avatar { background-color: rgba(255, 255, 255, 0.85); color: #3a3a3c; }
+.mydock-light .mydock-account-avatar { background-color: rgba(0, 0, 0, 0.08); color: #3a3a3c; }
+.mydock-account-name {
+    font-weight: bold;
+}
+
+/* now playing (sound menu) */
+.mydock-media-box {
+    spacing: 6px;
+}
+.mydock-media-top {
+    spacing: 12px;
+}
+.mydock-media-cover {
+    icon-size: 44px;
+    border-radius: 6px;
+}
+.mydock-media-title {
+    font-weight: bold;
+}
+.mydock-media-artist {
+    font-size: 9pt;
+    opacity: 0.7;
+}
+.mydock-media-progress {
+    -barlevel-height: 3px;
+    -barlevel-border-width: 0;
+    -barlevel-active-background-color: #0a84ff;
+    margin-top: 4px;
+}
+.mydock-dark .mydock-media-progress { -barlevel-background-color: rgba(255, 255, 255, 0.2); }
+.mydock-light .mydock-media-progress { -barlevel-background-color: rgba(0, 0, 0, 0.12); }
+.mydock-media-times {
+    font-size: 8pt;
+    font-feature-settings: "tnum";
+    opacity: 0.75;
+}
+.mydock-media-controls {
+    spacing: 18px;
+}
+.mydock-media-button {
+    padding: 6px;
+    border-radius: 999px;
+}
+.mydock-media-button StIcon {
+    icon-size: 20px;
+}
+.mydock-media-button:insensitive {
+    opacity: 0.4;
+}
+.mydock-dark .mydock-media-button:hover { background-color: rgba(255, 255, 255, 0.12); }
+.mydock-light .mydock-media-button:hover { background-color: rgba(0, 0, 0, 0.08); }
+
+/* ---- control center: GNOME quick settings in the tile look ---- */
+.mydock-control-center .quick-settings {
+    border-radius: 18px;
+    padding: 12px;
+}
+.mydock-dark .mydock-control-center .quick-settings {
+    background-color: rgba(30, 30, 32, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #f5f5f7;
+}
+.mydock-light .mydock-control-center .quick-settings {
+    background-color: rgba(246, 246, 248, 0.94);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    color: #1d1d1f;
+}
+.mydock-control-center .quick-settings-grid {
+    spacing-rows: 10px;
+    spacing-columns: 10px;
+}
+
+/* toggles become tiles, their icon a round chip that turns blue when on */
+.mydock-control-center .quick-toggle,
+.mydock-control-center .quick-menu-toggle .quick-toggle {
+    border-radius: 12px;
+    min-height: 44px;
+}
+.mydock-dark .mydock-control-center .quick-toggle {
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #f5f5f7;
+}
+.mydock-light .mydock-control-center .quick-toggle {
+    background-color: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    color: #1d1d1f;
+}
+.mydock-control-center .quick-toggle:checked,
+.mydock-dark .mydock-control-center .quick-toggle:checked,
+.mydock-light .mydock-control-center .quick-toggle:checked {
+    background-color: #0a84ff;
+    border-color: #0a84ff;
+    color: #ffffff;
+}
+.mydock-control-center .quick-toggle .quick-toggle-title {
+    font-weight: bold;
+}
+.mydock-control-center .quick-menu-toggle .quick-toggle-arrow {
+    border-radius: 0 12px 12px 0;
+}
+
+/* sliders sit in their own rounded card, thick pill bar like the menus */
+.mydock-control-center .quick-slider {
+    border-radius: 12px;
+    padding: 8px 10px;
+}
+.mydock-dark .mydock-control-center .quick-slider {
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.mydock-light .mydock-control-center .quick-slider {
+    background-color: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+.mydock-control-center .quick-slider .slider {
+    -barlevel-height: 20px;
+    -barlevel-border-width: 0;
+    -slider-handle-radius: 10px;
+    -barlevel-active-background-color: #ffffff;
+    color: #ffffff;
+}
+.mydock-dark .mydock-control-center .quick-slider .slider { -barlevel-background-color: rgba(255, 255, 255, 0.14); }
+.mydock-light .mydock-control-center .quick-slider .slider { -barlevel-background-color: rgba(0, 0, 0, 0.1); }
+
+/* round icon buttons on the top row (screenshot, settings, lock, power) */
+.mydock-control-center .quick-settings-system-item .icon-button {
+    border-radius: 999px;
+}
