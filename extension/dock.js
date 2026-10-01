@@ -27,6 +27,7 @@ const REBUILD_KEYS = [
     'show-running-dots', 'theme-path',
 ];
 
+const BLUR_BANDS = 6;       // blur bands per rounded corner (see restyle)
 const HIDE_DELAY = 400; // ms before intellihide re-evaluates after pointer leaves
 const CALENDAR_ID = 'org.gnome.Calendar.desktop';
 const CLOCKS_ID = 'org.gnome.clocks.desktop';
@@ -489,6 +490,11 @@ class DockBar {
             y_align: Clutter.ActorAlign.START,
         });
         this._tint = new St.Widget({style_class: 'mydock-bg', x_expand: true, y_expand: true});
+        // the corner radius comes from the theme, which may resolve after the first layout
+        this._tint.connect('style-changed', () => {
+            this._blurKey = null;
+            this._layoutBlur();
+        });
         this._bg.add_child(this._tint);
         this.actor.add_child(this._bg);
 
@@ -651,15 +657,59 @@ class DockBar {
         const s = this.dock.ext.settings;
         this._tint.opacity = Math.round(s.get_int('opacity') * 2.55);
         const radius = s.get_int('blur');
-        if (radius > 0 && !this._blur) {
-            this._blur = new Shell.BlurEffect({mode: Shell.BlurMode.BACKGROUND, brightness: 1.0});
-            this._bg.add_effect(this._blur);
-        } else if (radius === 0 && this._blur) {
-            this._bg.remove_effect(this._blur);
-            this._blur = null;
+        // blur effects set up before the dock is first painted leave square corner artifacts;
+        // build them once it is on screen
+        if (!this._bg.mapped) {
+            this._bg.connectObject('notify::mapped', () => {
+                this._bg.disconnectObject(this);
+                this.restyle();
+            }, this);
+            return;
         }
-        if (this._blur)
-            this._blur.radius = radius;
+        // Shell.BlurEffect can't round its corners (GNOME 46), so the blur is made of horizontal
+        // bands: a full-width middle band plus BLUR_BANDS bands per corner row, each inset to
+        // follow the tint's corner curve. _layoutBlur() sizes them.
+        if (radius > 0 && !this._blurBands) {
+            this._blurBands = [];
+            for (let i = 0; i < 2 * BLUR_BANDS + 1; i++) {
+                const band = new St.Widget({x_align: Clutter.ActorAlign.START, y_align: Clutter.ActorAlign.START});
+                band.add_effect(new Shell.BlurEffect({mode: Shell.BlurMode.BACKGROUND, brightness: 1.0}));
+                this._bg.insert_child_below(band, this._tint);
+                this._blurBands.push(band);
+            }
+        } else if (radius === 0 && this._blurBands) {
+            this._blurBands.forEach(b => b.destroy());
+            this._blurBands = null;
+        }
+        this._blurBands?.forEach(b => (b.get_effects()[0].radius = radius));
+        this._blurKey = null;
+        this._layoutBlur();
+    }
+
+    _layoutBlur() {
+        if (!this._blurBands)
+            return;
+        const [W, H] = this._bg.get_size();
+        const node = this._tint.get_theme_node?.();
+        const r = Math.min(H / 2, W / 2, node ? node.get_border_radius(St.Corner.TOPLEFT) : 18);
+        const key = `${W}x${H}x${r}`;
+        if (key === this._blurKey)
+            return;
+        this._blurKey = key;
+        const [mid, ...corners] = this._blurBands;
+        mid.set_position(0, Math.round(r));
+        mid.set_size(W, Math.max(0, H - 2 * Math.round(r)));
+        const step = r / BLUR_BANDS;
+        for (let i = 0; i < BLUR_BANDS; i++) {
+            // inset of the circle at the band's middle row, measured from the corner center
+            const dy = r - (i + 0.5) * step;
+            const inset = Math.round(r - Math.sqrt(Math.max(0, r * r - dy * dy)));
+            const y0 = Math.round(i * step), y1 = Math.round((i + 1) * step);
+            for (const [band, y] of [[corners[2 * i], y0], [corners[2 * i + 1], H - y1]]) {
+                band.set_position(inset, y);
+                band.set_size(Math.max(0, W - 2 * inset), y1 - y0);
+            }
+        }
     }
 
     // Rebuild the children order: pinned (+ user separators), running, separator, specials.
@@ -922,6 +972,7 @@ class DockBar {
         const grow = total + this._gapCur;
         this._bg.set_position(Math.round(this.box.x - grow / 2), this.box.y);
         this._bg.set_size(Math.round(this.box.width + grow), this.box.height);
+        this._layoutBlur();
 
         if (this._label.visible)
             this._placeLabel();
