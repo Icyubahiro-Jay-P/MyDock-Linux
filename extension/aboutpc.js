@@ -107,7 +107,12 @@ export function showAboutPC(_ext) {
     }
 
     dialog.setInitialKeyFocus(more);
-    dialog.open();
+    if (!dialog.open())
+        dialog.destroy(); // no modal grab: drop it, or _about would block every later open
+}
+
+export function closeAboutPC() {
+    _about?.close();
 }
 
 // one sensor row per temp*_input in tempFile's hwmon dir, or a single "CPU" row for a thermal zone
