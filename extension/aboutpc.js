@@ -1,4 +1,4 @@
-// About This PC dialog and the CPU temperature popup card (finderbar.js calls both).
+// About This PC dialog and the Finder bar stat popup cards (finderbar.js calls both).
 import Cairo from 'cairo';
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -9,7 +9,8 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as Util from 'resource:///org/gnome/shell/misc/util.js';
 import {
     parseCpuStat, cpuUsage, parseSensors, parseCpuModel, parseMemTotal,
-    parseOsRelease, formatModel, parseLspciGpu,
+    parseOsRelease, formatModel, parseLspciGpu, parseCoreStats, parseMemInfo, parseNetDev,
+    formatRate, formatBytes,
 } from './sysinfo.js';
 
 const HISTORY = 30;
@@ -141,8 +142,8 @@ function readSensors(tempFile) {
 }
 
 // Like the reference: two faint dashed grid lines (top and a quarter down), then blue bars with
-// rounded tops, a touch darker toward the bottom.
-function drawChart(area, history) {
+// rounded tops, a touch darker toward the bottom. Bars are history / max.
+function drawChart(area, history, max) {
     const cr = area.get_context();
     const [w, h] = area.get_surface_size();
     cr.setSourceRGBA(1, 1, 1, 0.15);
@@ -159,7 +160,7 @@ function drawChart(area, history) {
     const bar = Math.max(1, slot - 2);
     const top = h * 0.3;
     history.forEach((v, i) => {
-        const bh = Math.max(1, (h - top) * v / 100);
+        const bh = Math.max(1, (h - top) * Math.min(1, v / max));
         const x = w - (history.length - i) * slot + (slot - bar) / 2;
         const y = h - bh;
         const r = Math.min(2, bh / 2, bar / 2);
@@ -177,32 +178,131 @@ function drawChart(area, history) {
     cr.$dispose();
 }
 
-export function attachTempPopup(menu, tempFile) {
+// ---- samplers: () -> {value: bar height or null, rows: [[name, text], ...]} ----
+
+const MAX_CORE_ROWS = 8; // more cores than this: total only, the card would outgrow the screen
+
+// seeded now so the first open already has a delta to draw a bar from
+function cpuSampler() {
+    let text = readText('/proc/stat');
+    let prev = parseCpuStat(text), prevCores = parseCoreStats(text);
+    return () => {
+        text = readText('/proc/stat');
+        const cur = parseCpuStat(text), cores = parseCoreStats(text);
+        const value = cur && prev ? cpuUsage(prev, cur) : null;
+        const pct = v => `${Math.round(v)}%`;
+        const rows = [['Usage', value === null ? '...' : pct(value)]];
+        const load = readText('/proc/loadavg')?.split(' ').slice(0, 3).join('  ');
+        if (load)
+            rows.push(['Load average', load]);
+        if (cores.length <= MAX_CORE_ROWS && cores.length === prevCores.length)
+            cores.forEach((c, i) => rows.push([`Core ${i + 1}`, pct(cpuUsage(prevCores[i], c))]));
+        prev = cur ?? prev;
+        prevCores = cores;
+        return {value, rows};
+    };
+}
+
+function tempSampler(tempFile) {
+    const cpu = cpuSampler();
+    return () => ({value: cpu().value, rows: readSensors(tempFile)});
+}
+
+function memSampler() {
+    return () => {
+        const m = parseMemInfo(readText('/proc/meminfo'));
+        if (!m)
+            return null;
+        const used = m.total - m.avail;
+        const value = 100 * used / m.total;
+        return {value, rows: [
+            ['Used', `${formatBytes(used)} (${Math.round(value)}%)`],
+            ['Total', formatBytes(m.total)],
+            ['Swap', m.swapTotal ? `${formatBytes(m.swapTotal - m.swapFree)} / ${formatBytes(m.swapTotal)}` : 'None'],
+        ]};
+    };
+}
+
+// statfs is async so a slow disk never stalls the compositor: each call returns the last result
+function diskSampler() {
+    let last = null;
+    return () => {
+        Gio.File.new_for_path('/').query_filesystem_info_async('filesystem::size,filesystem::free',
+            GLib.PRIORITY_LOW, null, (f, res) => {
+                try {
+                    const info = f.query_filesystem_info_finish(res);
+                    const size = info.get_attribute_uint64('filesystem::size');
+                    const free = info.get_attribute_uint64('filesystem::free');
+                    last = size ? {value: 100 * (size - free) / size, rows: [
+                        ['Used', `${formatBytes(size - free)} (${Math.round(100 * (size - free) / size)}%)`],
+                        ['Free', formatBytes(free)],
+                        ['Total', formatBytes(size)],
+                    ]} : null;
+                } catch {}
+            });
+        return last;
+    };
+}
+
+// bar = down + up bytes/s, scaled to the busiest second in the chart
+function netSampler() {
+    let prev = null;
+    return () => {
+        const net = parseNetDev(readText('/proc/net/dev'));
+        const now = GLib.get_monotonic_time();
+        let down = null, up = null;
+        if (net && prev) {
+            const dt = (now - prev.time) / 1e6;
+            down = Math.max(0, (net.rx - prev.rx) / dt);
+            up = Math.max(0, (net.tx - prev.tx) / dt);
+        }
+        prev = net ? {...net, time: now} : null;
+        return {value: down === null ? null : down + up, rows: [
+            ['Download', down === null ? '...' : formatRate(down)],
+            ['Upload', up === null ? '...' : formatRate(up)],
+        ]};
+    };
+}
+
+// stat key -> [card title, sampler factory, bars relative to the chart's max instead of 0..100 %]
+const POPUPS = {
+    temp: ['CPU', tempSampler, false],
+    cpu: ['CPU Usage', cpuSampler, false],
+    mem: ['Memory', memSampler, false],
+    disk: ['Disk', diskSampler, false],
+    net: ['Network', netSampler, true],
+};
+
+// The Finder bar stat popup card (reference screenshot 44): centered title, live bar chart and
+// detail rows, sampled once a second while the menu is open. Returns a handle with destroy().
+export function attachStatPopup(menu, key, tempFile) {
+    const [title, makeSampler, relative] = POPUPS[key];
+    const sampler = makeSampler(tempFile);
     const item = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false, style_class: 'mydock-temp-item'});
     const card = new St.BoxLayout({vertical: true, x_expand: true, style_class: 'mydock-temp-card'});
-    card.add_child(new St.Label({text: 'CPU', style_class: 'mydock-temp-title', x_align: Clutter.ActorAlign.CENTER}));
+    card.add_child(new St.Label({text: title, style_class: 'mydock-temp-title', x_align: Clutter.ActorAlign.CENTER}));
     const history = [];
     const chart = new St.DrawingArea({style_class: 'mydock-temp-chart', x_expand: true});
-    chart.connect('repaint', () => drawChart(chart, history));
+    chart.connect('repaint', () => drawChart(chart, history, relative ? Math.max(1, ...history) : 100));
     card.add_child(chart);
     const rows = new St.BoxLayout({vertical: true, style_class: 'mydock-temp-rows'});
     card.add_child(rows);
     item.add_child(card);
     menu.addMenuItem(item);
 
-    // seeded now so the first open already has a delta to draw a bar from
-    let prev = parseCpuStat(readText('/proc/stat')), timerId = 0, alive = true;
+    let timerId = 0, alive = true;
     const sample = () => {
-        const cur = parseCpuStat(readText('/proc/stat'));
-        if (cur && prev) {
-            history.push(cpuUsage(prev, cur));
+        const s = sampler();
+        if (typeof s?.value === 'number') {
+            history.push(s.value);
             if (history.length > HISTORY)
                 history.shift();
         }
-        prev = cur ?? prev;
         chart.queue_repaint();
+        if (!s)
+            return;
         rows.destroy_all_children();
-        for (const [name, value] of readSensors(tempFile)) {
+        for (const [name, value] of s.rows) {
             const row = new St.BoxLayout({style_class: 'mydock-temp-row'});
             row.add_child(new St.Label({text: name, x_expand: true}));
             row.add_child(new St.Label({text: value}));
