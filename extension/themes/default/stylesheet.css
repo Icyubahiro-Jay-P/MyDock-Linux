@@ -67,7 +67,7 @@
 /* the arrow under it (dock.js) is drawn in this background and border color */
 .mydock-label {
   padding: 3px 11px;
-  border-radius: 4px;
+  border-radius: 8px;
   font-size: 10pt;
   font-weight: bold;
   color: #1c1c1e;
@@ -263,7 +263,7 @@
 #panel.mydock-finderbar .panel-button,
 #panel.mydock-finderbar .panel-button.clock-display .clock {
     border: none;
-    border-radius: 4px;
+    border-radius: 6px;
     box-shadow: none;
     transition-duration: 120ms;
 }
@@ -296,15 +296,18 @@
     padding: 3px 15px;
 }
 
-/* logo: centered 29px in from the screen edge, flush against the app name */
+/* logo: a bar-height square (24px, see #panel height) centered 29px in from the screen edge, so the
+   hover / open highlight is square; the icon is centered in it (x/y_align in finderbar.js) */
 #panel.mydock-finderbar .mydock-logo-button {
-    -natural-hpadding: 6px;
-    -minimum-hpadding: 4px;
+    -natural-hpadding: 0;
+    -minimum-hpadding: 0;
+    width: 24px;
+    margin-left: 17px;
 }
 #panel.mydock-finderbar .panel-button .mydock-logo-icon {
     icon-size: 16px;
     padding: 0;
-    margin: 0 0 0 15px;
+    margin: 0;
 }
 
 /* focused app name: a little more room than the menu labels after it, as in the reference */
@@ -419,7 +422,7 @@
    quickSettings menus. Dark by default, light under .mydock-light (on Main.uiGroup). ---- */
 .mydock-menu .popup-menu-content {
     padding: 4px 0;
-    border-radius: 6px;
+    border-radius: 10px;
     font-size: 10pt;
     font-weight: bold;
     color: #f5f5f7;
@@ -475,7 +478,7 @@
 }
 .mydock-menu .popup-sub-menu {
     background-color: rgba(255, 255, 255, 0.05);
-    border-radius: 5px;
+    border-radius: 6px;
     margin: 0 4px;
 }
 /* 12px tall: 5px above the line, 6px below */
@@ -716,7 +719,7 @@
 .mydock-about-more {
   margin-top: 16px;
   padding: 2px 20px;
-  border-radius: 5px;
+  border-radius: 11px;
   font-weight: bold;
   font-size: 9.5pt;
   color: #f2f2f7;
@@ -728,7 +731,7 @@
 .mydock-about-more:focus { background-color: rgba(255, 255, 255, 0.32); }
 .mydock-about-more:active { background-color: rgba(255, 255, 255, 0.4); }
 
-/* ---- CPU temperature popup card (attachTempPopup) ---- */
+/* ---- stat popup cards: temperature, CPU, memory, disk, network (aboutpc.js attachStatPopup) ---- */
 /* card 14px in from the menu edge: 1px border + 4px content padding / item margin + 9px here.
    .mydock-menu in front so this beats the generic menu-item padding. */
 .mydock-menu .mydock-temp-item,
@@ -740,7 +743,7 @@
 .mydock-temp-card {
   min-width: 244px;
   padding: 6px 13px 10px 13px;
-  border-radius: 6px;
+  border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background-color: rgba(255, 255, 255, 0.02);
   spacing: 6px;
@@ -837,6 +840,15 @@
     opacity: 0.7;
 }
 
+/* tray chevron menu: one row per background app, its own full-color icon in the chip */
+.mydock-tray-menu .mydock-chip-icon {
+    icon-size: 18px;
+    -st-icon-style: requested;
+}
+.mydock-tray-menu .mydock-status-row StLabel {
+    max-width: 190px;
+}
+
 /* thick pill sliders (brightness, volume) */
 .mydock-slider-row {
     padding-top: 6px;
@@ -892,9 +904,12 @@
     spacing: 12px;
 }
 .mydock-media-cover {
-    icon-size: 44px;
-    border-radius: 6px;
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    background-size: cover;
 }
+.mydock-media-cover-icon { icon-size: 44px; }
 .mydock-media-title {
     font-weight: bold;
 }
@@ -1068,8 +1083,10 @@
     spacing: 12px;
 }
 .mydock-media-compact .mydock-media-cover {
-    icon-size: 40px;
+    width: 40px;
+    height: 40px;
 }
+.mydock-media-compact .mydock-media-cover-icon { icon-size: 40px; }
 .mydock-media-compact .mydock-media-title {
     font-size: 9.5pt;
 }
