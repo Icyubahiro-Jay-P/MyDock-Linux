@@ -18,7 +18,9 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as Util from 'resource:///org/gnome/shell/misc/util.js';
 import * as SystemActions from 'resource:///org/gnome/shell/misc/systemActions.js';
 import {AppMenu} from 'resource:///org/gnome/shell/ui/appMenu.js';
-import {showAboutPC, closeAboutPC, attachTempPopup} from './aboutpc.js';
+import {showAboutPC, closeAboutPC, attachStatPopup} from './aboutpc.js';
+import {mergeOrder} from './panel-order.js';
+import {parseCpuStat, cpuUsage, parseMemInfo, parseNetDev, formatRate} from './sysinfo.js';
 
 const STORE_APPS = ['snap-store_snap-store.desktop', 'io.snapcraft.Store.desktop', 'org.gnome.Software.desktop'];
 const TASK_APPS = ['org.gnome.SystemMonitor.desktop', 'gnome-system-monitor.desktop', 'gnome-system-monitor-kde.desktop'];
@@ -33,8 +35,6 @@ const STATS = [
     ['cpu', 'cpu', 'CPU Usage'], ['temp', 'temp', 'CPU Temperature'], ['mem', 'memory', 'Memory Usage'],
     ['disk', 'disk', 'Disk Usage'], ['net', 'network', 'Network Speed'],
 ];
-const MEM_TOTAL_RE = /^MemTotal:\s+(\d+)/m;
-const MEM_AVAIL_RE = /^MemAvailable:\s+(\d+)/m;
 
 function readText(path) {
     try {
@@ -66,29 +66,6 @@ function recentFiles() {
     return out;
 }
 
-// /proc/stat first line: user nice system idle iowait irq softirq steal ...
-function readCpu() {
-    const f = readText('/proc/stat')?.split('\n')[0].trim().split(/\s+/).slice(1).map(Number);
-    if (!f?.length)
-        return null;
-    return {total: f.reduce((a, b) => a + b, 0), idle: f[3] + (f[4] ?? 0)};
-}
-
-// summed rx/tx bytes of every interface but loopback
-function readNet() {
-    const lines = readText('/proc/net/dev')?.split('\n').slice(2) ?? [];
-    let rx = 0, tx = 0;
-    for (const line of lines) {
-        const [name, data] = line.split(':');
-        if (!data || name.trim() === 'lo')
-            continue;
-        const f = data.trim().split(/\s+/).map(Number);
-        rx += f[0];
-        tx += f[8];
-    }
-    return lines.length ? {rx, tx} : null;
-}
-
 // CPU package temperature: coretemp / k10temp hwmon, else the x86_pkg_temp or first thermal zone
 function findTempFile() {
     for (let i = 0; i < 32; i++) {
@@ -108,16 +85,6 @@ function findTempFile() {
         first ??= `/sys/class/thermal/thermal_zone${i}/temp`;
     }
     return first;
-}
-
-function formatRate(bytesPerSec) {
-    const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
-    let v = Math.max(0, bytesPerSec), u = 0;
-    while (v >= 1000 && u < units.length - 1) {
-        v /= 1024;
-        u++;
-    }
-    return `${v < 10 && u > 0 ? v.toFixed(1) : Math.round(v)}${units[u]}`;
 }
 
 // GNOME's Panel gives each side at most half the bar width, so a busy right side (stats, tray
@@ -171,6 +138,7 @@ export class FinderBar {
         this._buildClock();
         this._statBtn = {}; // stat key -> its PanelMenu.Button
         this._stat = {}; // stat key -> its value label
+        this._popup = {}; // stat key -> its popup card (aboutpc.js)
         this._syncStats();
         this._layout();
         this._syncBlur();
@@ -201,7 +169,12 @@ export class FinderBar {
     _buildLogo() {
         const btn = new PanelMenu.Button(0.0, 'MyDock Menu');
         btn.add_style_class_name('mydock-logo-button');
-        this._logoIcon = new St.Icon({style_class: 'system-status-icon mydock-logo-icon'});
+        // centered in the square button (CSS: bar-height square highlight)
+        this._logoIcon = new St.Icon({
+            style_class: 'system-status-icon mydock-logo-icon',
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
         btn.add_child(this._logoIcon);
         this._logoButton = btn;
         this._syncLogo();
@@ -220,6 +193,7 @@ export class FinderBar {
             else
                 Util.spawn(['gnome-control-center']);
         });
+        menu.addAction('Preferences', () => this._ext.openPreferences());
         const store = STORE_APPS.map(id => appSys.lookup_app(id)).find(a => a);
         if (store)
             menu.addAction('App Store', () => store.activate());
@@ -461,13 +435,11 @@ export class FinderBar {
 
     _buildStat(key, initial) {
         const [, icon, name] = STATS.find(s => s[0] === key);
-        // only the temperature has a popup (aboutpc.js CPU card)
-        const btn = new PanelMenu.Button(0.0, name, key !== 'temp');
+        // a click opens the stat's live graph card (aboutpc.js)
+        const btn = new PanelMenu.Button(0.0, name);
         btn.add_style_class_name('mydock-stat-button');
-        if (key === 'temp') {
-            btn.menu.actor.add_style_class_name('mydock-menu');
-            this._tempPopup = attachTempPopup(btn.menu, this._tempFile);
-        }
+        btn.menu.actor.add_style_class_name('mydock-menu');
+        this._popup[key] = attachStatPopup(btn.menu, key, this._tempFile);
         const cell = new St.BoxLayout({style_class: 'mydock-stat', y_align: Clutter.ActorAlign.CENTER});
         const file = Gio.File.new_for_path(`${this._ext.path}/icons/mydock-${icon}-symbolic.svg`);
         cell.add_child(new St.Icon({
@@ -484,20 +456,8 @@ export class FinderBar {
         this._statBtn[key] = btn;
         this._stat[key] = value;
 
-        const first = initial ? null : this._firstStat();
+        // the queued _applyOrder puts it back in its saved slot (kept while it was switched off)
         Main.panel.addToStatusArea(`mydock-stat-${key}`, btn, 0, 'right');
-        if (!initial) {
-            // switched on by the user: goes left of the other stats, and is saved there so a
-            // stale finderbar-order entry can't pull it back
-            if (first) {
-                const box = first.get_parent();
-                this._applying = true;
-                btn.container.get_parent()?.remove_child(btn.container);
-                box.insert_child_at_index(btn.container, box.get_children().indexOf(first));
-                this._applying = false;
-            }
-            this._saveOrder();
-        }
 
         if (key === 'disk')
             this._statTick = 0; // read it on the next update
@@ -512,21 +472,9 @@ export class FinderBar {
             this._updateStats();
     }
 
-    // leftmost stat container in the bar (left, center, right box order)
-    _firstStat() {
-        for (const box of Object.values(this._boxes)) {
-            const kid = box.get_children().find(k => this._roleOf(k)?.startsWith('mydock-stat-'));
-            if (kid)
-                return kid;
-        }
-        return null;
-    }
-
     _destroyStat(key) {
-        if (key === 'temp') {
-            this._tempPopup?.destroy();
-            this._tempPopup = null;
-        }
+        this._popup[key]?.destroy();
+        delete this._popup[key];
         this._statBtn[key].destroy(); // the panel drops statusArea[role] on destroy
         delete this._statBtn[key];
         delete this._stat[key];
@@ -546,12 +494,9 @@ export class FinderBar {
         // drops its previous sample so a stale delta is never used later
         const shown = key => !!this._statBtn[key]?.mapped;
         if (shown('cpu')) {
-            const cpu = readCpu();
-            if (cpu && this._prevCpu) {
-                const total = cpu.total - this._prevCpu.total;
-                const busy = total - (cpu.idle - this._prevCpu.idle);
-                this._stat.cpu.text = `${total > 0 ? Math.round(100 * busy / total) : 0}%`;
-            }
+            const cpu = parseCpuStat(readText('/proc/stat'));
+            if (cpu && this._prevCpu)
+                this._stat.cpu.text = `${Math.round(cpuUsage(this._prevCpu, cpu))}%`;
             this._prevCpu = cpu;
         } else {
             this._prevCpu = null;
@@ -568,10 +513,8 @@ export class FinderBar {
         }
 
         if (shown('mem')) {
-            const mem = readText('/proc/meminfo');
-            const total = parseInt(mem?.match(MEM_TOTAL_RE)?.[1] ?? '0');
-            const avail = parseInt(mem?.match(MEM_AVAIL_RE)?.[1] ?? '0');
-            this._stat.mem.text = total ? `${Math.round(100 * (total - avail) / total)}%` : '';
+            const mem = parseMemInfo(readText('/proc/meminfo'));
+            this._stat.mem.text = mem ? `${Math.round(100 * (mem.total - mem.avail) / mem.total)}%` : '';
         }
 
         // disk usage changes slowly: every 15th tick (~30 s); async so a slow statfs never
@@ -594,7 +537,7 @@ export class FinderBar {
         }
 
         if (shown('net')) {
-            const net = readNet();
+            const net = parseNetDev(readText('/proc/net/dev'));
             const now = GLib.get_monotonic_time();
             if (net && this._prevNet) {
                 const dt = (now - this._prevNet.time) / 1e6;
@@ -660,16 +603,38 @@ export class FinderBar {
         });
     }
 
-    _applyOrder() {
+    _savedOrder() {
         // the stats used to be one item (mydock-stats): put the per-stat items in its slot
-        const order = this._settings.get_strv('finderbar-order').flatMap(e => e.endsWith(':mydock-stats')
+        return this._settings.get_strv('finderbar-order').flatMap(e => e.endsWith(':mydock-stats')
             ? STATS.map(([key]) => e.replace('mydock-stats', `mydock-stat-${key}`)) : [e]);
-        if (!order.length || this._drag)
+    }
+
+    // "box:role" of every movable item in the bar, left to right
+    _currentOrder() {
+        const order = [];
+        for (const [name, box] of Object.entries(this._boxes)) {
+            for (const kid of box.get_children()) {
+                const role = this._roleOf(kid);
+                if (role && !this._pinned(kid))
+                    order.push(`${name}:${role}`);
+            }
+        }
+        return order;
+    }
+
+    // Every item in the bar is placed, not only the saved ones: an item the saved order has never
+    // seen (status menus, stats, tray icons built after it was saved) stays next to its current
+    // neighbours instead of being pushed to the end of its box.
+    _applyOrder() {
+        const saved = this._savedOrder();
+        if (!saved.length || this._drag)
             return;
         this._applying = true;
         const next = {};
-        for (const entry of order) {
-            const [name, role] = entry.split(':');
+        for (const entry of mergeOrder(saved, this._currentOrder())) {
+            // the role may contain ':' (app indicators), the box name never does
+            const name = entry.slice(0, entry.indexOf(':'));
+            const role = entry.slice(name.length + 1);
             const box = this._boxes[name];
             const actor = Main.panel.statusArea[role]?.container;
             if (!box || !actor || this._pinned(actor))
@@ -686,16 +651,11 @@ export class FinderBar {
         this._applying = false;
     }
 
+    // our own items that are away right now (stat switched off, status menus not built yet) keep
+    // their saved slot; others' are dropped (app indicator roles change every run)
     _saveOrder() {
-        const order = [];
-        for (const [name, box] of Object.entries(this._boxes)) {
-            for (const kid of box.get_children()) {
-                const role = this._roleOf(kid);
-                if (role && !this._pinned(kid))
-                    order.push(`${name}:${role}`);
-            }
-        }
-        this._settings.set_strv('finderbar-order', order);
+        const away = this._savedOrder().filter(e => e.includes(':mydock-'));
+        this._settings.set_strv('finderbar-order', mergeOrder(this._currentOrder(), away));
     }
 
     _onPanelEvent(ev) {
@@ -705,7 +665,7 @@ export class FinderBar {
                 !(ev.get_state() & Clutter.ModifierType.CONTROL_MASK))
                 return Clutter.EVENT_PROPAGATE;
             const boxes = Object.values(this._boxes);
-            let actor = ev.get_source();
+            let actor = global.stage.get_event_actor(ev);
             while (actor && !boxes.includes(actor.get_parent()))
                 actor = actor.get_parent();
             if (!actor || this._pinned(actor) || !this._roleOf(actor))
