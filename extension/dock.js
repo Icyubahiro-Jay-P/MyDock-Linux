@@ -32,7 +32,7 @@ const REBUILD_KEYS = [
 
 const PILL_W = 500;          // the auto-hidden dock shrinks into a pill this size
 const PILL_H = 15;
-const PILL_GAP = 4;          // between the pill and the screen edge
+const PILL_GAP = 2;          // between the pill and the screen edge
 const HIDE_DELAY = 400; // ms before intellihide re-evaluates after pointer leaves
 const CALENDAR_ID = 'org.gnome.Calendar.desktop';
 const CLOCKS_ID = 'org.gnome.clocks.desktop';
