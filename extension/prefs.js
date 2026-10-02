@@ -146,7 +146,7 @@ const DEPENDS = {
 };
 
 const PREVIEW_ICONS = 8;
-// Scale ticks like the reference sliders (marks drawn under the trough).
+// Tick count for long slider ranges (prefs.css lifts the marks onto the track).
 const SLIDER_TICKS = 8;
 
 const AUTHOR = 'Irakoze Icyubahiro Jean Pierre (@Icyubahiro-Jay-P)';
