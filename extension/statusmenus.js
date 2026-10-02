@@ -755,7 +755,9 @@ class SoundItem extends StatusItem {
 function nowPlaying(drops, compact = false) {
     const col = new St.BoxLayout({vertical: true, x_expand: true, visible: false, style_class: 'mydock-media-box'});
     const top = new St.BoxLayout({style_class: 'mydock-media-top', x_expand: true});
-    const cover = new St.Icon({style_class: 'mydock-media-cover', y_align: Clutter.ActorAlign.CENTER});
+    // a Bin, not an Icon: St clips a background-image to border-radius but never an icon
+    const coverIcon = new St.Icon({style_class: 'mydock-media-cover-icon', x_expand: true, y_expand: true});
+    const cover = new St.Bin({style_class: 'mydock-media-cover', y_align: Clutter.ActorAlign.CENTER, child: coverIcon});
     const text = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
     const title = new St.Label({style_class: 'mydock-media-title'});
     const artist = new St.Label({style_class: 'mydock-media-artist', visible: !compact});
@@ -852,8 +854,14 @@ function nowPlaying(drops, compact = false) {
         }
         if (!player)
             return;
-        cover.gicon = player.trackCoverUrl
-            ? new Gio.FileIcon({file: Gio.File.new_for_uri(player.trackCoverUrl)})
+        // ponytail: only local art (file://) gets rounded corners; http(s) art (Spotify) stays a
+        // square icon until it is downloaded to a cache file first
+        const url = player.trackCoverUrl ?? '';
+        const local = url.startsWith('file://') ? Gio.File.new_for_uri(url).get_path() : null;
+        cover.style = local ? `background-image: url("${local.replace(/["\\]/g, '\\$&')}");` : null;
+        coverIcon.visible = !local;
+        coverIcon.gicon = url && !local
+            ? new Gio.FileIcon({file: Gio.File.new_for_uri(url)})
             : themed('audio-x-generic-symbolic');
         title.text = player.trackTitle ?? '';
         artist.text = player.trackArtists?.join(', ') ?? '';
@@ -901,39 +909,44 @@ function nowPlaying(drops, compact = false) {
     return col;
 }
 
-// ---- tray chevron: collapses / expands third-party indicators ----
+// ---- tray chevron: third-party indicators (AppIndicator / StatusNotifierItem apps such as Spotify,
+// Discord or Steam, plus other extensions' buttons) leave the bar and are listed in its menu, one row
+// per app (reference screenshot 51). The AppIndicator host is Ubuntu's ubuntu-appindicators
+// extension: it puts each app in Main.panel.statusArea as 'appindicator-<id>', so we only collect.
+// ponytail: without that host (non-Ubuntu session) nothing registers SNI apps; we don't run our own
+// StatusNotifierWatcher, install the AppIndicator extension instead ----
 
-class TrayItem {
+// first St.Icon inside an indicator, the one its row's chip copies
+function findIcon(actor) {
+    if (actor instanceof St.Icon)
+        return actor;
+    for (const child of actor.get_children()) {
+        const icon = findIcon(child);
+        if (icon)
+            return icon;
+    }
+    return null;
+}
+
+class TrayItem extends StatusItem {
     constructor() {
-        this._sigs = [];
-        this._hidden = new Map(); // container -> its visibility before we hid it
-        this._collapsed = true;
-        this.btn = new PanelMenu.Button(0.0, 'Tray', true);
-        this.btn.add_style_class_name('mydock-status-button');
+        super('mydock-tray', 'Background Apps', 'pan-down-symbolic');
         this.btn.add_style_class_name('mydock-tray-button');
-        this._icon = new St.Icon({style_class: 'system-status-icon'});
-        this.btn.add_child(this._icon);
-        this.btn.connect('button-press-event', () => this._toggle());
-        this.btn.connect('touch-event', (_a, ev) => ev.type() === Clutter.EventType.TOUCH_BEGIN
-            ? this._toggle() : Clutter.EVENT_PROPAGATE);
-        this.btn.connect('key-press-event', (_a, ev) => [Clutter.KEY_Return, Clutter.KEY_KP_Enter, Clutter.KEY_space]
-            .includes(ev.get_key_symbol()) ? this._toggle() : Clutter.EVENT_PROPAGATE);
-        addButton('mydock-tray', this.btn);
-
+        this.btn.menu.actor.add_style_class_name('mydock-tray-menu');
+        this._hidden = new Map(); // container -> its visibility before we hid it
         const p = Main.panel;
         for (const box of [p._leftBox, p._centerBox, p._rightBox]) {
-            for (const sig of ['child-added', 'child-removed']) {
-                const id = box.connect(sig, () => this._queueSync());
-                this._sigs.push(() => box.disconnect(id));
-            }
+            for (const sig of ['child-added', 'child-removed'])
+                this._connect(box, sig, () => this._queueSync());
         }
         this._sync();
     }
 
-    _toggle() {
-        this._collapsed = !this._collapsed;
-        this._sync();
-        return Clutter.EVENT_STOP;
+    _indicators() {
+        const area = Main.panel.statusArea;
+        return Object.keys(area)
+            .filter(r => !r.startsWith('mydock-') && !BUILTIN_ROLES.has(r))
+            .map(r => area[r]).filter(ind => ind?.container);
     }
 
     _queueSync() {
@@ -945,45 +958,83 @@ class TrayItem {
     }
 
     _sync() {
-        const area = Main.panel.statusArea;
-        const current = new Set(Object.keys(area)
-            .filter(r => !r.startsWith('mydock-') && !BUILTIN_ROLES.has(r))
-            .map(r => area[r]?.container).filter(Boolean));
+        const current = new Set(this._indicators().map(ind => ind.container));
         for (const c of [...this._hidden.keys()]) {
             if (!current.has(c))
                 this._hidden.delete(c); // indicator went away
         }
-        if (this._collapsed) {
-            for (const c of current) {
-                if (!this._hidden.has(c)) {
-                    this._hidden.set(c, c.visible);
-                    c.visible = false;
-                }
-            }
-        } else {
-            this._restore();
+        for (const c of current) {
+            if (!this._hidden.has(c))
+                this._hidden.set(c, c.visible);
+            c.visible = false; // again: the shell re-shows a container it moves (tray-pos change)
         }
         this.btn.container.visible = current.size > 0;
-        this._icon.icon_name = this._collapsed ? 'pan-start-symbolic' : 'pan-end-symbolic';
-        this.btn.accessible_name = this._collapsed ? 'Show tray icons' : 'Hide tray icons';
     }
 
-    _restore() {
-        for (const [c, visible] of this._hidden)
-            c.visible = visible;
-        this._hidden.clear();
+    _fill(menu) {
+        for (const ind of this._indicators()) {
+            if (!ind.visible)
+                continue; // not ready yet, or a passive (idle) AppIndicator
+            const sni = ind._indicator; // ubuntu-appindicators' StatusNotifierItem
+            const name = sni?.title || sni?.id || ind._icon?.wm_class || ind.accessible_name || 'App';
+            const icon = findIcon(ind);
+            const item = new PopupMenu.PopupBaseMenuItem({style_class: 'mydock-status-row'});
+            const c = chip(icon?.gicon ?? (icon?.icon_name ? themed(icon.icon_name) : null));
+            if (!icon && ind._icon instanceof Clutter.Actor) // legacy XEmbed tray icon: no St.Icon to copy
+                c.child = new Clutter.Clone({source: ind._icon});
+            item.add_child(c);
+            item.add_child(new St.Label({text: name, x_expand: true, y_align: Clutter.ActorAlign.CENTER}));
+            item.connect('activate', (_i, event) => this._activate(ind, event));
+            menu.addMenuItem(item);
+        }
+        if (menu.isEmpty())
+            menu.addMenuItem(heading('No apps in the background'));
+    }
+
+    // what a left click on the indicator itself does: its menu, else the app's own Activate
+    _activate(ind, event) {
+        this.btn.menu.close();
+        const menu = ind.menu;
+        if (menu?.numMenuItems) {
+            // its own button is hidden, so the menu would have nothing to point at: anchor it to
+            // the chevron while open
+            const source = menu.sourceActor;
+            menu.sourceActor = this.btn;
+            menu.toggle();
+            if (menu.isOpen) {
+                const unanchor = (close = true) => {
+                    if (this._unanchor === unanchor)
+                        this._unanchor = null;
+                    menu.disconnect(id);
+                    if (close)
+                        menu.close();
+                    menu.sourceActor = source;
+                };
+                const id = menu.connect('open-state-changed', (_m, open) => !open && unanchor(false));
+                this._unanchor = unanchor;
+                return;
+            }
+            menu.sourceActor = source; // nothing visible in it: activate instead
+        }
+        const [x, y] = event?.get_coords() ?? [0, 0];
+        if (typeof ind._indicator?.open === 'function')
+            ind._indicator.open(x, y, event?.get_time() ?? global.get_current_time()).catch(logError);
+        else if (typeof ind._icon?.click === 'function' && event)
+            ind._icon.click(event); // ponytail: legacy XEmbed icon (X11 only), untested
     }
 
     destroy() {
-        while (this._sigs.length)
-            this._sigs.pop()();
+        this._run(this._sigs);
         if (this._syncId) {
             GLib.source_remove(this._syncId);
             this._syncId = 0;
         }
+        this._unanchor?.();
         this._sync(); // drop containers of indicators that left meanwhile
-        this._restore();
-        this.btn.destroy();
+        for (const [c, visible] of this._hidden)
+            c.visible = visible;
+        this._hidden.clear();
+        super.destroy();
     }
 }
 
@@ -1150,11 +1201,12 @@ class ControlCenter extends StatusItem {
         const squares = row();
         right.add_child(squares);
         // our own drawings of the reference's icons (no stock symbolic looks like them)
+        const svg = icon => new Gio.FileIcon({file: Gio.File.new_for_path(`${this._ext.path}/icons/mydock-${icon}-symbolic.svg`)});
         const square = (text, icon, fn) => {
-            const file = Gio.File.new_for_path(`${this._ext.path}/icons/mydock-${icon}-symbolic.svg`);
             const b = new St.Button({can_focus: true, x_expand: true, style_class: 'mydock-cc-tile mydock-cc-square'});
             const v = new St.BoxLayout({vertical: true, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
-            v.add_child(new St.Icon({gicon: new Gio.FileIcon({file}), style_class: 'mydock-cc-square-icon', x_align: Clutter.ActorAlign.CENTER}));
+            b._icon = new St.Icon({gicon: svg(icon), style_class: 'mydock-cc-square-icon', x_align: Clutter.ActorAlign.CENTER});
+            v.add_child(b._icon);
             v.add_child(new St.Label({text, style_class: 'mydock-cc-square-label', x_align: Clutter.ActorAlign.CENTER}));
             b.child = v;
             b.connect('clicked', fn);
@@ -1164,7 +1216,11 @@ class ControlCenter extends StatusItem {
         const settings = this._ext.settings;
         const stage = square('Stage\nManager', 'stage-manager',
             () => settings.set_boolean('stage-manager', !settings.get_boolean('stage-manager')));
-        syncs.push(() => (stage.checked = settings.get_boolean('stage-manager')));
+        // filled while Stage Manager is on, outlined while off
+        syncs.push(() => {
+            stage.checked = settings.get_boolean('stage-manager');
+            stage._icon.gicon = svg(stage.checked ? 'stage-manager-filled' : 'stage-manager');
+        });
         this._connect(settings, 'changed::stage-manager', sync, drops);
         square('Screen\nMirroring', 'screen-mirroring', () => {
             this.btn.menu.close();
