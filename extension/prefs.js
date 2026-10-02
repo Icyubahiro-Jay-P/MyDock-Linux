@@ -165,6 +165,8 @@ export default class MyDockPrefs extends ExtensionPreferences {
         const display = Gdk.Display.get_default();
         // above USER: a full theme in ~/.config/gtk-4.0/gtk.css would otherwise restyle our buttons
         Gtk.StyleContext.add_provider_for_display(display, css, Gtk.STYLE_PROVIDER_PRIORITY_USER + 1);
+        // the Finder bar's meter glyphs, reused on Hardware Status
+        Gtk.IconTheme.get_for_display(display).add_search_path(`${this.path}/icons`);
         // Charcoal palette only under the dark style; light mode keeps the libadwaita colors.
         window.add_css_class('mydock-window');
         const styles = Adw.StyleManager.get_default();
@@ -339,7 +341,7 @@ export default class MyDockPrefs extends ExtensionPreferences {
         heroGroup.add(hero);
 
         // Software Update: manual check against the latest GitHub release.
-        const update = new Adw.PreferencesGroup({title: 'Software Update'});
+        const update = new Adw.PreferencesGroup({title: 'Software Update', css_classes: ['mydock-update']});
         const status = new Adw.ActionRow({title: `${name} ${version}`, use_markup: false, css_classes: ['mydock-update-row']});
         const spinner = new Gtk.Spinner({visible: false, valign: center});
         const updateNow = new Gtk.Button({label: 'Update Now', visible: false, valign: center, css_classes: ['suggested-action', 'mydock-button']});
@@ -401,7 +403,7 @@ export default class MyDockPrefs extends ExtensionPreferences {
             updateNow.visible = false;
             status.title = 'Look for the update notification at the top of the screen.';
         });
-        const auto = this._row(settings, schema.get_key('check-updates'), 'check-updates');
+        const auto = this._row(settings, schema.get_key('check-updates'), 'check-updates', TITLES['check-updates']);
         update.add(status);
         update.add(auto);
         update.add(new Gtk.Label({label: `${name} checks GitHub once a day and offers a one-click update.`,
@@ -442,7 +444,7 @@ export default class MyDockPrefs extends ExtensionPreferences {
             this._section(page, heroGroup, [{row: hero, text: `about version author ${name} ${author}`.toLowerCase()}]),
             this._section(page, update, [
                 {row: status, text: 'software update check for updates version'},
-                {row: auto, text: `${auto.title} check-updates`.toLowerCase()},
+                {row: auto, text: `${TITLES['check-updates']} check-updates`.toLowerCase()},
             ]),
             this._section(page, support, [{row: momo, text: 'support donate mtn mobile money momo copy number'}]),
         ];
@@ -456,46 +458,49 @@ export default class MyDockPrefs extends ExtensionPreferences {
         return sections;
     }
 
-    _row(settings, skey, key) {
-        const title = TITLES[key] ?? skey.get_summary() ?? key;
-
-        if (ENUM_ROWS[key]) {
-            const labels = ENUM_ROWS[key];
-            const shown = labels.map(l => l[0].toUpperCase() + l.slice(1));
-            // compact macOS popup button instead of a full-width combo row
-            const drop = new Gtk.DropDown({model: Gtk.StringList.new(shown), valign: Gtk.Align.CENTER, css_classes: ['mydock-popup']});
-            drop.selected = Math.max(0, labels.indexOf(settings.get_string(key)));
-            drop.connect('notify::selected', () => settings.set_string(key, labels[drop.selected]));
-            settings.connect(`changed::${key}`, () => (drop.selected = Math.max(0, labels.indexOf(settings.get_string(key)))));
-            const row = new Adw.ActionRow({title, activatable_widget: drop});
-            row.add_suffix(drop);
-            return row;
-        }
-
+    // Booleans are a checkbox, or a switch on the right for SWITCHES. Everything else is
+    // stacked like the reference: a bold title with its control underneath.
+    _row(settings, skey, key, title) {
         const type = skey.get_value_type().dup_string();
-        if (type === 'b') {
-            const row = new Adw.SwitchRow({title});
-            settings.bind(key, row, 'active', Gio.SettingsBindFlags.DEFAULT);
-            return row;
+        if (type === 'b' && !SWITCHES.has(key)) {
+            const check = new Gtk.CheckButton({label: title, css_classes: ['mydock-check']});
+            settings.bind(key, check, 'active', Gio.SettingsBindFlags.DEFAULT);
+            return listRow(check, 'mydock-check-row');
         }
-        if (type === 'i') {
+        if (type === 'b') {
+            const box = new Gtk.Box({spacing: 14});
+            if (ROW_ICONS[key])
+                box.append(new Gtk.Image({icon_name: ROW_ICONS[key], pixel_size: 30, css_classes: ['mydock-row-icon']}));
+            box.append(new Gtk.Label({label: title, xalign: 0, hexpand: true, wrap: true, css_classes: ['mydock-row-title']}));
+            const toggle = new Gtk.Switch({valign: Gtk.Align.CENTER});
+            settings.bind(key, toggle, 'active', Gio.SettingsBindFlags.DEFAULT);
+            box.append(toggle);
+            return listRow(box, 'mydock-switch-row');
+        }
+
+        let control;
+        if (ENUM_ROWS[key]) {
+            control = enumPopup(settings, key);
+        } else if (type === 'i') {
             const [, range] = skey.get_range().deepUnpack();
             const [lo, hi] = range.deepUnpack();
-            if (key in SLIDER_UNITS)
-                return sliderRow(settings, key, title, lo, hi, SLIDER_UNITS[key]);
-            const row = Adw.SpinRow.new_with_range(lo, hi, 1);
-            row.title = title;
-            settings.bind(key, row, 'value', Gio.SettingsBindFlags.DEFAULT);
-            return row;
+            control = slider(settings, key, lo, hi, SLIDER_UNITS[key] ?? '');
+        } else if (type === 'as') {
+            control = shortcutButton(settings, key, title);
+        } else if (PATH_ROWS[key]) {
+            control = pathPicker(settings, key, title, PATH_ROWS[key] === 'folder');
+        } else {
+            control = textEntry(settings, key);
         }
-        if (type === 'as')
-            return shortcutRow(settings, key, title);
-        if (PATH_ROWS[key])
-            return pathRow(settings, key, title, PATH_ROWS[key] === 'folder');
-        const row = new Adw.EntryRow({title});
-        settings.bind(key, row, 'text', Gio.SettingsBindFlags.DEFAULT);
-        return row;
+        const box = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 8});
+        box.append(new Gtk.Label({label: title, xalign: 0, wrap: true, css_classes: ['mydock-row-title']}));
+        box.append(control);
+        return listRow(box, 'mydock-stack-row');
     }
+}
+
+function listRow(child, cls) {
+    return new Gtk.ListBoxRow({child, activatable: false, selectable: false, css_classes: [cls]});
 }
 
 function sidebarRow(title, icon, color) {
@@ -505,35 +510,62 @@ function sidebarRow(title, icon, color) {
     return new Gtk.ListBoxRow({child: box});
 }
 
-function sliderRow(settings, key, title, lo, hi, unit) {
-    const row = new Adw.ActionRow({title});
+// compact grey popup button with the blue chevron cap
+function enumPopup(settings, key) {
+    const labels = ENUM_ROWS[key];
+    const shown = labels.map(l => l[0].toUpperCase() + l.slice(1));
+    const drop = new Gtk.DropDown({model: Gtk.StringList.new(shown), halign: Gtk.Align.START, css_classes: ['mydock-popup']});
+    drop.selected = Math.max(0, labels.indexOf(settings.get_string(key)));
+    drop.connect('notify::selected', () => settings.set_string(key, labels[drop.selected]));
+    settings.connect(`changed::${key}`, () => (drop.selected = Math.max(0, labels.indexOf(settings.get_string(key)))));
+    return drop;
+}
+
+// Ticks on the track: one per step for short ranges, SLIDER_TICKS otherwise.
+function slider(settings, key, lo, hi, unit) {
     const adj = new Gtk.Adjustment({lower: lo, upper: hi, step_increment: 1, page_increment: Math.max(1, Math.round((hi - lo) / 10))});
-    const scale = new Gtk.Scale({adjustment: adj, draw_value: false, round_digits: 0, width_request: 220, valign: Gtk.Align.CENTER, css_classes: ['mydock-scale']});
-    for (let i = 0; i <= SLIDER_TICKS; i++)
-        scale.add_mark(lo + (hi - lo) * i / SLIDER_TICKS, Gtk.PositionType.BOTTOM, null);
-    const value = new Gtk.Label({width_chars: 7, xalign: 1, css_classes: ['dim-label', 'numeric']});
+    const scale = new Gtk.Scale({adjustment: adj, draw_value: false, round_digits: 0, hexpand: true, css_classes: ['mydock-scale']});
+    const steps = hi - lo <= 12 ? hi - lo : SLIDER_TICKS;
+    for (let i = 0; i <= steps; i++)
+        scale.add_mark(lo + (hi - lo) * i / steps, Gtk.PositionType.BOTTOM, null);
+    const tip = v => (scale.tooltip_text = unit ? `${v} ${unit}` : `${v}`);
     // Explicit sync: GSettings has no double -> int32 mapping for binding an adjustment.
     adj.value = settings.get_int(key);
-    value.label = `${adj.value} ${unit}`;
+    tip(adj.value);
     adj.connect('value-changed', () => {
         const v = Math.round(adj.value);
-        value.label = `${v} ${unit}`;
+        tip(v);
         if (settings.get_int(key) !== v)
             settings.set_int(key, v);
     });
     settings.connect(`changed::${key}`, () => (adj.value = settings.get_int(key)));
-    row.add_suffix(scale);
-    row.add_suffix(value);
-    return row;
+    return scale;
 }
 
-function pathRow(settings, key, title, folder) {
-    const row = new Adw.ActionRow({title, subtitle_lines: 1});
-    const clear = new Gtk.Button({icon_name: 'edit-clear-symbolic', tooltip_text: 'Use the default', valign: Gtk.Align.CENTER, css_classes: ['flat']});
-    const choose = new Gtk.Button({label: 'Choose...', valign: Gtk.Align.CENTER});
+// Plain text field; the clock format also shows what it renders right now.
+function textEntry(settings, key) {
+    const entry = new Gtk.Entry({width_chars: 26, halign: Gtk.Align.START, css_classes: ['mydock-entry']});
+    settings.bind(key, entry, 'text', Gio.SettingsBindFlags.DEFAULT);
+    if (key !== 'time-format')
+        return entry;
+    const sample = new Gtk.Label({xalign: 0, css_classes: ['dim-label', 'mydock-sample']});
+    const sync = () => (sample.label = GLib.DateTime.new_now_local().format(settings.get_string(key)) || 'Invalid format');
+    settings.connect(`changed::${key}`, sync);
+    sync();
+    const box = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 4});
+    box.append(entry);
+    box.append(sample);
+    return box;
+}
+
+function pathPicker(settings, key, title, folder) {
+    const box = new Gtk.Box({spacing: 8});
+    const choose = new Gtk.Button({label: 'Choose...', css_classes: ['mydock-pill']});
+    const label = new Gtk.Label({xalign: 0, hexpand: true, ellipsize: Pango.EllipsizeMode.MIDDLE, css_classes: ['dim-label']});
+    const clear = new Gtk.Button({icon_name: 'edit-clear-symbolic', tooltip_text: 'Use the default', css_classes: ['flat', 'mydock-clear']});
     const sync = () => {
         const path = settings.get_string(key);
-        row.subtitle = path || 'Default';
+        label.label = path || 'Default';
         clear.visible = !!path;
     };
     settings.connect(`changed::${key}`, sync);
@@ -556,24 +588,24 @@ function pathRow(settings, key, title, folder) {
             }
         };
         if (folder)
-            dialog.select_folder(row.get_root(), null, finish);
+            dialog.select_folder(box.get_root(), null, finish);
         else
-            dialog.open(row.get_root(), null, finish);
+            dialog.open(box.get_root(), null, finish);
     });
-    row.add_suffix(clear);
-    row.add_suffix(choose);
-    return row;
+    box.append(choose);
+    box.append(label);
+    box.append(clear);
+    return box;
 }
 
-function shortcutRow(settings, key, title) {
-    const row = new Adw.ActionRow({title, activatable: true});
-    const label = new Gtk.ShortcutLabel({disabled_text: 'Disabled', valign: Gtk.Align.CENTER});
+function shortcutButton(settings, key, title) {
+    const label = new Gtk.ShortcutLabel({disabled_text: 'Disabled'});
+    const button = new Gtk.Button({child: label, halign: Gtk.Align.START, tooltip_text: 'Click to record a new shortcut', css_classes: ['mydock-pill']});
     const sync = () => (label.accelerator = settings.get_strv(key)[0] ?? '');
     settings.connect(`changed::${key}`, sync);
     sync();
-    row.add_suffix(label);
-    row.connect('activated', () => captureShortcut(row, settings, key, title));
-    return row;
+    button.connect('clicked', () => captureShortcut(button, settings, key, title));
+    return button;
 }
 
 function captureShortcut(row, settings, key, title) {
@@ -677,6 +709,6 @@ function appearanceGroup(settings) {
 
     const group = new Adw.PreferencesGroup({title: 'Appearance'});
     group.add(picker);
-    group._picker = picker;
+    group._search = {row: picker, text: 'appearance light dark follow os mode'};
     return group;
 }
