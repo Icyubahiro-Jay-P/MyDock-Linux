@@ -62,7 +62,7 @@ window.mydock-window.mydock-dark {
 .mydock-prefs .mydock-badge {
     min-width: 20px;
     min-height: 20px;
-    border-radius: 5px;
+    border-radius: 6px;
     color: white;
     -gtk-icon-shadow: 0 1px 1px alpha(black, 0.18);
     box-shadow: inset 0 0 0 1px alpha(black, 0.08), inset 0 1px alpha(white, 0.18);
@@ -94,7 +94,7 @@ window.mydock-window.mydock-dark {
     min-height: 28px;
     padding: 1px 8px;
     margin: 1px 0;
-    border-radius: 5px;
+    border-radius: 7px;
 }
 .mydock-prefs .mydock-sidebar > row:hover {
     background-color: alpha(currentColor, 0.06);
@@ -252,7 +252,7 @@ window.mydock-window.mydock-dark {
     margin: 0;
     padding: 0;
     border: none;
-    border-radius: 3px;
+    border-radius: 4px;
     background-image: none;
     background-color: alpha(currentColor, 0.2);
     box-shadow: inset 0 0 0 1px alpha(currentColor, 0.12);
@@ -363,7 +363,7 @@ window.mydock-window.mydock-dark {
     min-height: 20px;
     padding: 1px 2px 1px 9px;
     border: none;
-    border-radius: 5px;
+    border-radius: 6px;
     font-weight: 700;
     background-image: none;
     background-color: alpha(currentColor, 0.1);
@@ -392,6 +392,7 @@ window.mydock-window.mydock-dark {
 .mydock-prefs dropdown.mydock-popup > button > box > arrow {
     min-width: 16px;
     min-height: 16px;
+    margin: 0; /* the user theme's -6px margin would push the cap past the pill edge */
     border-radius: 4px;
     background-color: #185cd9;
     color: white;
@@ -418,14 +419,14 @@ window.mydock-window.mydock-dark {
 /* Dropdown list: dark menu, blue highlight */
 .mydock-dark .mydock-prefs dropdown.mydock-popup popover > contents {
     padding: 4px;
-    border-radius: 6px;
+    border-radius: 10px;
     background-color: #2b2b2b;
     box-shadow: 0 0 0 1px alpha(white, 0.16), 0 6px 18px alpha(black, 0.4);
 }
 .mydock-prefs dropdown.mydock-popup popover listview > row {
     min-height: 22px;
     padding: 0 8px;
-    border-radius: 4px;
+    border-radius: 6px;
     font-weight: 700;
 }
 .mydock-prefs dropdown.mydock-popup popover listview > row:hover,
@@ -434,11 +435,11 @@ window.mydock-window.mydock-dark {
     color: white;
 }
 
-/* Text fields: plain rectangle with a grey edge */
+/* Text fields: soft rounded box with a grey edge */
 .mydock-prefs entry.mydock-entry {
     min-height: 24px;
     padding: 0 6px;
-    border-radius: 3px;
+    border-radius: 6px;
     font-weight: 700;
     background-image: none;
     background-color: alpha(currentColor, 0.04);
@@ -452,8 +453,8 @@ window.mydock-window.mydock-dark {
     outline: none;
 }
 
-/* Plain buttons inside cards (Choose..., Check for Updates, Copy Number) */
-.mydock-prefs preferencesgroup:not(.mydock-plain) row button:not(.flat):not(.suggested-action):not(.image-button) {
+/* Plain buttons inside cards (Choose..., Check for Updates, Copy Number); not the popup pills */
+.mydock-prefs preferencesgroup:not(.mydock-plain) row button:not(.flat):not(.suggested-action):not(.image-button):not(.toggle):not(.mydock-pill) {
     min-height: 24px;
     padding: 2px 12px;
     border-radius: 6px;
