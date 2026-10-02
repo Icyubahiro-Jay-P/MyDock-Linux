@@ -1067,13 +1067,19 @@ class ControlCenter extends StatusItem {
         this._detached = [];
         const box = qs?._indicators;
         if (box) {
-            for (const name of DUPLICATE_INDICATORS) {
-                const actor = qs[name];
-                if (!actor || actor.get_parent() !== box)
-                    continue;
-                this._detached.push([actor, box.get_children().indexOf(actor)]);
-                box.remove_child(actor);
-            }
+            // GNOME builds network, bluetooth, volume etc. asynchronously (_setupIndicators awaits
+            // imports), so at login they can arrive after us: detach on every child-added as well
+            const detach = () => {
+                for (const name of DUPLICATE_INDICATORS) {
+                    const actor = qs[name];
+                    if (!actor || actor.get_parent() !== box)
+                        continue;
+                    this._detached.push([actor, box.get_children().indexOf(actor)]);
+                    box.remove_child(actor);
+                }
+            };
+            detach();
+            this._connect(box, 'child-added', detach);
             this._qsIndex = qs.get_children().indexOf(box);
             qs.remove_child(box);
             this._box.insert_child_at_index(box, 0);
@@ -1274,6 +1280,7 @@ class ControlCenter extends StatusItem {
 
     destroy() {
         delete Main.panel.toggleQuickSettings;
+        this._run(this._sigs); // stop detaching before the indicators go back
         const qs = this._qs;
         const box = qs?._indicators;
         if (box?.get_parent() === this._box) {
