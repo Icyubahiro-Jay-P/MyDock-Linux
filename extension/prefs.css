@@ -354,7 +354,7 @@ window.mydock-window.mydock-dark {
     min-width: 1px;
     min-height: 7px;
     margin: 0;
-    background-color: alpha(currentColor, 0.18);
+    background-color: alpha(currentColor, 0.3);
 }
 
 /* Popup buttons (dropdowns, Choose..., shortcut): grey pill, the dropdown with a blue chevron cap */
