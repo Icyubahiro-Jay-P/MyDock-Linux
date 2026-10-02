@@ -374,7 +374,7 @@ window.mydock-window.mydock-dark {
 }
 .mydock-dark .mydock-prefs dropdown.mydock-popup > button,
 .mydock-dark .mydock-prefs button.mydock-pill {
-    background-color: #5f5f5f;
+    background-color: #ffffffc4;
     box-shadow: none;
     color: white;
 }
