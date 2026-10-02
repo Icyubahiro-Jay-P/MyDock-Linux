@@ -178,7 +178,7 @@ window.mydock-window.mydock-dark {
 /* List pages: no card, rows straight on the pane */
 .mydock-prefs .mydock-list preferencesgroup:not(.mydock-plain) > box,
 .mydock-dark .mydock-list preferencesgroup:not(.mydock-plain) > box {
-    padding: 0 20px;
+    padding: 0;
     background: none;
     box-shadow: none;
 }
@@ -231,8 +231,8 @@ window.mydock-window.mydock-dark {
     margin-right: 2px;
 }
 .mydock-prefs .mydock-list .mydock-footnote {
-    margin-left: 22px;
-    margin-right: 22px;
+    margin-left: 0;
+    margin-right: 0;
 }
 .mydock-prefs .mydock-sample {
     font-weight: 700;
