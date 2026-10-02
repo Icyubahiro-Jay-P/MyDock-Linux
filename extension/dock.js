@@ -46,6 +46,12 @@ function appFromSource(source) {
     return source?.app instanceof Shell.App ? source.app : null;
 }
 
+// Separator line: nearly the dock's full height like the reference, lifted by P/2 so it is
+// centered on the panel rather than on the icon + dot row it sits in.
+function separatorLine({S, P}, props = {}) {
+    return new St.Widget({style_class: 'mydock-separator', height: S + P - 2, translation_y: -Math.round(P / 2), ...props});
+}
+
 // Rounded-rectangle alpha mask. The rect comes in as uniforms, so moving or resizing the dock
 // only updates a few floats: the texture keeps its size (no reallocation per magnify frame) and
 // nothing below it is re-rendered or re-blurred.
@@ -282,12 +288,13 @@ class DockItem extends St.Button {
             this._bounce();
     }
 
-    // focused app: the running dot becomes a short underline bar (theme: .mydock-dot-focused)
+    // focused app: the running dot becomes a pill as wide as the icon (theme: .mydock-dot-focused)
     setFocused(on) {
         if (on)
             this._dot.add_style_class_name('mydock-dot-focused');
         else
             this._dot.remove_style_class_name('mydock-dot-focused');
+        this._dot.width = on ? this._bar.geom.S : -1;   // -1: back to the theme's dot size
     }
 
     // p in 0..1, or null to hide the track
@@ -434,7 +441,7 @@ class DockSeparator extends St.Widget {
         this.anchor = anchor;
         this.shift = 0;
         // the line is 1px; its CSS margins make the grab area
-        this.add_child(new St.Widget({style_class: 'mydock-separator', height: Math.round(bar.geom.S * 0.8)}));
+        this.add_child(separatorLine(bar.geom));
 
         this._delegate = this;
         this._draggable = DND.makeDraggable(this);
@@ -466,7 +473,7 @@ class DockSeparator extends St.Widget {
     }
 
     getDragActor() {
-        return new St.Widget({style_class: 'mydock-separator', height: Math.round(this._bar.geom.S * 0.8)});
+        return separatorLine(this._bar.geom, {translation_y: 0});
     }
 
     _popupMenu() {
@@ -632,7 +639,8 @@ class DockBar {
         const s = dock.ext.settings;
         const S = s.get_int('icon-size');
         const M = s.get_boolean('magnify') ? Math.max(S, s.get_int('max-size')) : S;
-        const P = Math.round(S * 0.1) + 4;
+        // padding above the icons and the dot row below them: a 48px icon gives the reference's 76px dock
+        const P = Math.round(S * 0.29);
         const sp = s.get_int('icon-space');
         const E = s.get_int('edge-distance');
         this.geom = {S, M, P, sp, E, H: S + 2 * P};
@@ -721,20 +729,29 @@ class DockBar {
             this.dock.queueHideCheck();
         });
 
-        // hover label with a small down arrow under it, centered on the icon
+        // hover label with a down arrow under it, centered on the icon. The arrow takes the label's
+        // background and border colors and overlaps its bottom border by 1px, so the outline runs
+        // around both as one shape.
         this._label = new St.Label({style_class: 'mydock-label'});
-        const arrow = new St.DrawingArea({style_class: 'mydock-label-arrow', width: 12, height: 6,
-            x_align: Clutter.ActorAlign.CENTER});
+        const arrow = new St.DrawingArea({style_class: 'mydock-label-arrow', width: 18, height: 9,
+            translation_y: -1, x_align: Clutter.ActorAlign.CENTER});
         arrow.connect('repaint', () => {
             const cr = arrow.get_context();
             const [w, h] = arrow.get_surface_size();
-            const c = arrow.get_theme_node().get_foreground_color();
-            cr.setSourceRGBA(c.red / 255, c.green / 255, c.blue / 255, c.alpha / 255);
+            const node = this._label.get_theme_node();
+            const set = c => cr.setSourceRGBA(c.red / 255, c.green / 255, c.blue / 255, c.alpha / 255);
             cr.moveTo(0, 0);
             cr.lineTo(w, 0);
-            cr.lineTo(w / 2, h);
+            cr.lineTo(w / 2, h - 0.5);
             cr.closePath();
+            set(node.get_background_color());
             cr.fill();
+            cr.setLineWidth(1);
+            cr.moveTo(0.5, 0.5);
+            cr.lineTo(w / 2, h - 0.5);
+            cr.lineTo(w - 0.5, 0.5);
+            set(node.get_border_color(St.Side.BOTTOM));
+            cr.stroke();
             cr.$dispose();
         });
         this._tip = new St.BoxLayout({vertical: true, visible: false});
@@ -843,11 +860,7 @@ class DockBar {
             this._updateTrash();
         }
         if (this._specials.length) {
-            this._separator = new St.Widget({
-                style_class: 'mydock-separator',
-                y_align: Clutter.ActorAlign.CENTER,
-                height: Math.round(this.geom.S * 0.8),
-            });
+            this._separator = separatorLine(this.geom, {y_align: Clutter.ActorAlign.CENTER});
         }
     }
 
@@ -1042,12 +1055,13 @@ class DockBar {
         const [x, y] = icon.get_transformed_position();
         const [w] = icon.get_transformed_size();
         let ax = Math.round(x + w / 2 - a.width / 2);
-        // the tip arrow ends 2px above the icon; the popup keeps a gap and stays on the monitor
-        let ay = Math.round(y - a.height - 2);
+        // like the reference, the arrow tip and the popup both end ~20px above the icon; the
+        // popup stays on the monitor (the tip's arrow overlaps the label by 1px, hence 18)
+        let ay = Math.round(y - a.height - 18);
         if (a === this._month) {
             const mon = this.monitor;
             ax = Math.max(mon.x + 8, Math.min(ax, mon.x + mon.width - a.width - 8));
-            ay -= 8;
+            ay -= 2;
         }
         a.set_position(ax, ay);
     }
