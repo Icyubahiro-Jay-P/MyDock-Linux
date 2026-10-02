@@ -1,4 +1,5 @@
 // About This PC dialog and the CPU temperature popup card (finderbar.js calls both).
+import Cairo from 'cairo';
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -139,13 +140,15 @@ function readSensors(tempFile) {
     return parseSensors([['CPU', readText(tempFile)]]);
 }
 
+// Like the reference: two faint dashed grid lines (top and a quarter down), then blue bars with
+// rounded tops, a touch darker toward the bottom.
 function drawChart(area, history) {
     const cr = area.get_context();
     const [w, h] = area.get_surface_size();
-    cr.setSourceRGBA(1, 1, 1, 0.25);
+    cr.setSourceRGBA(1, 1, 1, 0.15);
     cr.setLineWidth(1);
-    cr.setDash([3, 3], 0);
-    for (const y of [0.5, Math.round(h * 0.3) + 0.5]) {
+    cr.setDash([5, 2], 0);
+    for (const y of [0.5, Math.round(h * 0.25) + 0.5]) {
         cr.moveTo(0, y);
         cr.lineTo(w, y);
     }
@@ -155,11 +158,21 @@ function drawChart(area, history) {
     const slot = w / HISTORY;
     const bar = Math.max(1, slot - 2);
     const top = h * 0.3;
-    cr.setSourceRGBA(0.12, 0.38, 0.95, 1);
     history.forEach((v, i) => {
         const bh = Math.max(1, (h - top) * v / 100);
-        cr.rectangle(w - (history.length - i) * slot + (slot - bar) / 2, h - bh, bar, bh);
+        const x = w - (history.length - i) * slot + (slot - bar) / 2;
+        const y = h - bh;
+        const r = Math.min(2, bh / 2, bar / 2);
+        cr.moveTo(x, h);
+        cr.arc(x + r, y + r, r, Math.PI, 1.5 * Math.PI);
+        cr.arc(x + bar - r, y + r, r, 1.5 * Math.PI, 2 * Math.PI);
+        cr.lineTo(x + bar, h);
+        cr.closePath();
     });
+    const fill = new Cairo.LinearGradient(0, 0, 0, h);
+    fill.addColorStopRGBA(0, 27 / 255, 102 / 255, 240 / 255, 1);
+    fill.addColorStopRGBA(1, 23 / 255, 88 / 255, 205 / 255, 1);
+    cr.setSource(fill);
     cr.fill();
     cr.$dispose();
 }
