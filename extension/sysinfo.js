@@ -64,3 +64,51 @@ export function parseLspciGpu(text) {
     }
     return gpus.join('\n') || null;
 }
+
+// one parseCpuStat sample per "cpuN" line of /proc/stat (per core)
+export function parseCoreStats(text) {
+    return (text?.split('\n') ?? []).filter(l => /^cpu\d+\s/.test(l)).map(parseCpuStat).filter(Boolean);
+}
+
+// /proc/meminfo -> bytes {total, avail, swapTotal, swapFree}; null without MemTotal
+export function parseMemInfo(text) {
+    const kb = key => 1024 * Number(text?.match(new RegExp(`^${key}:\\s+(\\d+)`, 'm'))?.[1] ?? 0);
+    const total = kb('MemTotal');
+    return total ? {total, avail: kb('MemAvailable'), swapTotal: kb('SwapTotal'), swapFree: kb('SwapFree')} : null;
+}
+
+// /proc/net/dev -> summed rx/tx bytes of every interface but loopback
+export function parseNetDev(text) {
+    const lines = text?.split('\n').slice(2) ?? [];
+    let rx = 0, tx = 0;
+    for (const line of lines) {
+        const [name, data] = line.split(':');
+        if (!data || name.trim() === 'lo')
+            continue;
+        const f = data.trim().split(/\s+/).map(Number);
+        rx += f[0];
+        tx += f[8];
+    }
+    return lines.length ? {rx, tx} : null;
+}
+
+// 1024-based, no space before the unit like the reference bar: "0.0KB/s", "12MB/s"
+export function formatRate(bytesPerSec) {
+    const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+    let v = Math.max(0, bytesPerSec), u = 0;
+    while (v >= 1000 && u < units.length - 1) {
+        v /= 1024;
+        u++;
+    }
+    return `${v < 10 && u > 0 ? v.toFixed(1) : Math.round(v)}${units[u]}`;
+}
+
+export function formatBytes(bytes) {
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let v = Math.max(0, bytes), u = 0;
+    while (v >= 1000 && u < units.length - 1) {
+        v /= 1024;
+        u++;
+    }
+    return `${u > 0 ? v.toFixed(1) : Math.round(v)} ${units[u]}`;
+}
