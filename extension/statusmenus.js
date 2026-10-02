@@ -1,6 +1,6 @@
 // MyDock - status menus. macOS-like status items for the Finder bar: Wi-Fi, Bluetooth, Account,
 // Display, Battery, Sound, a tray chevron for third-party indicators, and the Control Center
-// (GNOME's quick settings shown as one icon, restyled through the mydock-control-center class).
+// (our own tile panel, standing in for GNOME's quick settings button).
 // Every item reuses the shell's own backends, builds its menu only when opened, and hides when its
 // hardware is missing. Only active while finderbar-enabled is on. destroy() undoes everything.
 
@@ -78,10 +78,12 @@ function openPanel(name) {
         Util.spawn(['gnome-control-center', name]);
 }
 
-// new panel items go just left of the Control Center; FinderBar's saved order wins afterwards
+// new panel items go just left of the Control Center (ours, else GNOME's quick settings);
+// FinderBar's saved order wins afterwards
 function addButton(role, btn) {
+    const area = Main.panel.statusArea;
     const kids = Main.panel._rightBox.get_children();
-    const index = kids.indexOf(Main.panel.statusArea.quickSettings?.container);
+    const index = kids.indexOf((area['mydock-control-center'] ?? area.quickSettings)?.container);
     Main.panel.addToStatusArea(role, btn, Math.max(index, 0), 'right');
 }
 
@@ -91,17 +93,22 @@ function heading(text) {
     return new PopupMenu.PopupMenuItem(text, {reactive: false, can_focus: false, style_class: 'mydock-status-heading'});
 }
 
-// row with a round icon chip (blue when active) + label + optional trailing icon
-function chipRow(text, gicon, active = false, trailing = null) {
-    const item = new PopupMenu.PopupBaseMenuItem({style_class: 'mydock-status-row'});
-    const chip = new St.Bin({
+// round icon chip, blue (:checked) when on; a button when it has its own click
+function chip(gicon, on = false, button = false) {
+    const actor = new (button ? St.Button : St.Bin)({
         style_class: 'mydock-chip',
         y_align: Clutter.ActorAlign.CENTER,
         child: new St.Icon({gicon, style_class: 'mydock-chip-icon'}),
     });
-    if (active)
-        chip.add_style_pseudo_class('checked');
-    item.add_child(chip);
+    if (on)
+        actor.add_style_pseudo_class('checked');
+    return actor;
+}
+
+// row with a round icon chip (blue when active) + label + optional trailing icon
+function chipRow(text, gicon, active = false, trailing = null) {
+    const item = new PopupMenu.PopupBaseMenuItem({style_class: 'mydock-status-row'});
+    item.add_child(chip(gicon, active));
     item.add_child(new St.Label({text, x_expand: true, y_align: Clutter.ActorAlign.CENTER}));
     if (trailing)
         item.add_child(new St.Icon({icon_name: trailing, style_class: 'mydock-row-trailing'}));
@@ -110,14 +117,41 @@ function chipRow(text, gicon, active = false, trailing = null) {
 
 const themed = name => new Gio.ThemedIcon({name});
 
-// slider row; set() moves it without calling onChange back
-function sliderRow(value, onChange) {
-    const item = new PopupMenu.PopupBaseMenuItem({activate: false, style_class: 'mydock-slider-row'});
+// pill slider with its value (0-100) written on the knob; set() moves it without calling onChange back
+function valueSlider(value, onChange) {
     const slider = new Slider(value);
     slider.add_style_class_name('mydock-slider');
-    item.add_child(slider);
+    slider.x_expand = true;
+    const label = new St.Label({
+        style_class: 'mydock-slider-value',
+        x_align: Clutter.ActorAlign.START,
+        y_align: Clutter.ActorAlign.CENTER,
+    });
+    const actor = new St.Widget({layout_manager: new Clutter.BinLayout(), x_expand: true});
+    actor.add_child(slider);
+    actor.add_child(label);
+    // ui/slider.js draws the knob centre at r + (width - 2r) * value, r = ceil(radius + border)
+    const place = () => {
+        const r = Math.ceil(slider._handleRadius + slider._handleBorderWidth);
+        let x = r + (slider.width - 2 * r) * slider.value;
+        if (slider.get_text_direction() === Clutter.TextDirection.RTL)
+            x = slider.width - x;
+        label.translation_x = Math.round(x - label.width / 2);
+    };
+    const show = () => {
+        label.text = `${Math.round(slider.value * 100)}`;
+        place();
+    };
+    slider.connect('notify::width', place);
+    label.connect('notify::width', place);
+    show();
+
     let syncing = false;
-    slider.connect('notify::value', () => !syncing && onChange(slider.value));
+    slider.connect('notify::value', () => {
+        show();
+        if (!syncing)
+            onChange(slider.value);
+    });
     const set = v => {
         if (slider._dragging)
             return; // don't fight the user's drag
@@ -125,7 +159,13 @@ function sliderRow(value, onChange) {
         slider.value = Math.min(Math.max(v, 0), 1);
         syncing = false;
     };
-    return {item, slider, set};
+    return {actor, slider, set};
+}
+
+function sliderItem(actor) {
+    const item = new PopupMenu.PopupBaseMenuItem({activate: false, style_class: 'mydock-slider-row'});
+    item.add_child(actor);
+    return item;
 }
 
 function addSettings(menu, text, panel) {
@@ -486,26 +526,34 @@ class AccountItem extends StatusItem {
 class DisplayItem extends StatusItem {
     constructor() {
         super('mydock-display', 'Display', 'video-display-symbolic');
+        // made up front so the Control Center finds it ready
+        this._proxy = new BrightnessProxy(Gio.DBus.session, 'org.gnome.SettingsDaemon.Power',
+            '/org/gnome/SettingsDaemon/Power', (_p, error) => !error && this._queueRefresh());
+    }
+
+    // brightness slider that follows the backlight until `drops` run; null without a backlight
+    brightnessSlider(drops) {
+        const valid = b => Number.isInteger(b) && b >= 0; // -1 / missing: no backlight
+        const b = this._proxy.Brightness;
+        if (!valid(b))
+            return null;
+        const s = valueSlider(b / 100, v => (this._proxy.Brightness = Math.round(v * 100)));
+        this._connect(this._proxy, 'g-properties-changed', () => {
+            const nb = this._proxy.Brightness;
+            if (valid(nb))
+                s.set(nb / 100);
+        }, drops);
+        return s;
     }
 
     _fill(menu) {
         this._iface ??= new Gio.Settings({schema_id: 'org.gnome.desktop.interface'});
         this._color ??= new Gio.Settings({schema_id: 'org.gnome.settings-daemon.plugins.color'});
-        this._proxy ??= new BrightnessProxy(Gio.DBus.session, 'org.gnome.SettingsDaemon.Power',
-            '/org/gnome/SettingsDaemon/Power', (_p, error) => !error && this._queueRefresh());
 
         menu.addMenuItem(heading('Display'));
-        const valid = b => Number.isInteger(b) && b >= 0; // -1 / missing: no backlight
-        const b = this._proxy.Brightness;
-        if (valid(b)) {
-            const row = sliderRow(b / 100, v => (this._proxy.Brightness = Math.round(v * 100)));
-            menu.addMenuItem(row.item);
-            this._connect(this._proxy, 'g-properties-changed', () => {
-                const nb = this._proxy.Brightness;
-                if (valid(nb))
-                    row.set(nb / 100);
-            }, this._openDrops);
-        }
+        const s = this.brightnessSlider(this._openDrops);
+        if (s)
+            menu.addMenuItem(sliderItem(s.actor));
         menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
         const dark = this._iface.get_string('color-scheme') === 'prefer-dark';
@@ -603,6 +651,7 @@ class SoundItem extends StatusItem {
     constructor() {
         super('mydock-sound', 'Sound', 'audio-volume-high-symbolic');
         this._streamSigs = [];
+        this._volSliders = new Set(); // open volume sliders (this menu, Control Center)
         this._control = Volume.getMixerControl(); // the shell's singleton: never close it
         this._connect(this._control, 'state-changed', () => this._setStream());
         this._connect(this._control, 'default-sink-changed', () => this._setStream());
@@ -631,7 +680,15 @@ class SoundItem extends StatusItem {
         const v = this._level();
         const n = v <= 0 ? 0 : Math.min(3, Math.ceil(3 * v));
         this.icon.icon_name = `audio-volume-${['muted', 'low', 'medium', 'high'][n]}-symbolic`;
-        this._volRow?.set(v);
+        this._volSliders.forEach(s => s.set(v));
+    }
+
+    // volume slider that follows the default sink until `drops` run
+    volumeSlider(drops) {
+        const s = valueSlider(this._level(), v => this._setVolume(v));
+        this._volSliders.add(s);
+        drops.push(() => this._volSliders.delete(s));
+        return s;
     }
 
     _setVolume(v) {
@@ -647,9 +704,7 @@ class SoundItem extends StatusItem {
 
     _fill(menu) {
         menu.addMenuItem(heading('Sound'));
-        this._volRow = sliderRow(this._level(), v => this._setVolume(v));
-        this._openDrops.push(() => (this._volRow = null));
-        menu.addMenuItem(this._volRow.item);
+        menu.addMenuItem(sliderItem(this.volumeSlider(this._openDrops).actor));
 
         this._sound ??= new Gio.Settings({schema_id: 'org.gnome.desktop.sound'});
         const events = new PopupMenu.PopupSwitchMenuItem('System Sounds', this._sound.get_boolean('event-sounds'));
@@ -670,155 +725,15 @@ class SoundItem extends StatusItem {
             }
         }
 
-        this._buildMedia(menu);
-        addSettings(menu, 'Audio settings', 'sound');
-    }
-
-    // now playing: players are looked up and followed only while the menu is open
-    _buildMedia(menu) {
         const sep = new PopupMenu.PopupSeparatorMenuItem();
         const item = new PopupMenu.PopupBaseMenuItem({activate: false, hover: false, can_focus: false, style_class: 'mydock-media'});
-        sep.visible = item.visible = false;
-        menu.addMenuItem(sep);
-        menu.addMenuItem(item);
-
-        const col = new St.BoxLayout({vertical: true, x_expand: true, style_class: 'mydock-media-box'});
-        const top = new St.BoxLayout({style_class: 'mydock-media-top'});
-        const cover = new St.Icon({style_class: 'mydock-media-cover'});
-        const text = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
-        const title = new St.Label({style_class: 'mydock-media-title'});
-        const artist = new St.Label({style_class: 'mydock-media-artist'});
-        text.add_child(title);
-        text.add_child(artist);
-        top.add_child(cover);
-        top.add_child(text);
-        const bar = new BarLevel({style_class: 'slider mydock-media-progress', x_expand: true});
-        const times = new St.BoxLayout({style_class: 'mydock-media-times'});
-        const elapsed = new St.Label({x_expand: true});
-        const total = new St.Label();
-        times.add_child(elapsed);
-        times.add_child(total);
-        const controls = new St.BoxLayout({style_class: 'mydock-media-controls', x_align: Clutter.ActorAlign.CENTER});
-        const button = (icon, fn) => {
-            const b = new St.Button({style_class: 'mydock-media-button', can_focus: true, child: new St.Icon({icon_name: icon})});
-            b.connect('clicked', () => this._player && fn(this._player));
-            controls.add_child(b);
-            return b;
-        };
-        const prev = button('media-skip-backward-symbolic', p => p.previous());
-        const play = button('media-playback-start-symbolic', p => p.playPause());
-        const next = button('media-skip-forward-symbolic', p => p.next());
-        for (const a of [top, bar, times, controls])
-            col.add_child(a);
-        item.add_child(col);
-
-        const cancel = new Gio.Cancellable();
-        const players = new Map(); // bus name -> [MprisPlayer, signal ids]
-        this._player = null;
-        this._playerName = null;
-        let pos = null; // {us, t}: position at monotonic time t
-        let seekedId = 0;
-        let timerId = 0;
-
-        const length = () => this._player?._playerProxy?.Metadata?.['mpris:length']?.deepUnpack() ?? 0;
-        const tick = () => {
-            if (!pos)
-                return;
-            const playing = this._player?.status === 'Playing';
-            const us = pos.us + (playing ? GLib.get_monotonic_time() - pos.t : 0);
-            const len = length();
-            bar.value = len > 0 ? Math.min(us / len, 1) : 0;
-            elapsed.text = formatTime(us);
-            total.text = len > 0 ? formatTime(len) : '';
-        };
-        const fetchPosition = () => {
-            const name = this._playerName;
-            Gio.DBus.session.call(name, MPRIS_PATH, 'org.freedesktop.DBus.Properties', 'Get',
-                new GLib.Variant('(ss)', [MPRIS_PLAYER, 'Position']), new GLib.VariantType('(v)'),
-                Gio.DBusCallFlags.NONE, -1, cancel, (conn, res) => {
-                    try {
-                        const [v] = conn.call_finish(res).deepUnpack();
-                        if (name === this._playerName) {
-                            pos = {us: Number(v.deepUnpack()), t: GLib.get_monotonic_time()};
-                            tick();
-                        }
-                    } catch {} // cancelled, or the player has no position
-                });
-        };
-        const sync = () => {
-            const all = [...players.values()].map(([p]) => p);
-            const player = all.find(p => p.status === 'Playing') ?? all.find(p => p.status === 'Paused') ?? null;
-            const name = player ? [...players].find(([, [p]]) => p === player)[0] : null;
-            if (name !== this._playerName) {
-                if (seekedId)
-                    Gio.DBus.session.signal_unsubscribe(seekedId);
-                seekedId = name ? Gio.DBus.session.signal_subscribe(name, MPRIS_PLAYER, 'Seeked', MPRIS_PATH, null,
-                    Gio.DBusSignalFlags.NONE, (_c, _s, _p, _i, _n, params) => {
-                        pos = {us: Number(params.deepUnpack()[0]), t: GLib.get_monotonic_time()};
-                        tick();
-                    }) : 0;
-                this._playerName = name;
-                pos = null;
-            }
-            this._player = player;
-            sep.visible = item.visible = !!player;
-            const playing = player?.status === 'Playing';
-            if (playing && !timerId) {
-                timerId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, 1, () => {
-                    tick();
-                    return GLib.SOURCE_CONTINUE;
-                });
-            } else if (!playing && timerId) {
-                GLib.source_remove(timerId);
-                timerId = 0;
-            }
-            if (!player)
-                return;
-            cover.gicon = player.trackCoverUrl
-                ? new Gio.FileIcon({file: Gio.File.new_for_uri(player.trackCoverUrl)})
-                : themed('audio-x-generic-symbolic');
-            title.text = player.trackTitle ?? '';
-            artist.text = player.trackArtists?.join(', ') ?? '';
-            play.child.icon_name = playing ? 'media-playback-pause-symbolic' : 'media-playback-start-symbolic';
-            prev.reactive = !!player.canGoPrevious;
-            next.reactive = !!player.canGoNext;
-            fetchPosition(); // status or track changed: position jumps
-        };
-        const add = name => {
-            const p = new MprisPlayer(name);
-            players.set(name, [p, [
-                p.connect('changed', sync),
-                p.connect('closed', () => {
-                    players.delete(name);
-                    sync();
-                }),
-            ]]);
-        };
-
-        Gio.DBus.session.call('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'ListNames',
-            null, new GLib.VariantType('(as)'), Gio.DBusCallFlags.NONE, -1, cancel, (conn, res) => {
-                try {
-                    const [names] = conn.call_finish(res).deepUnpack();
-                    names.filter(n => n.startsWith(MPRIS_PREFIX)).forEach(add);
-                } catch {} // cancelled: menu closed meanwhile
-            });
-
-        this._openDrops.push(() => {
-            cancel.cancel();
-            if (seekedId)
-                Gio.DBus.session.signal_unsubscribe(seekedId);
-            if (timerId)
-                GLib.source_remove(timerId);
-            for (const [p, ids] of players.values()) {
-                ids.forEach(id => p.disconnect(id));
-                // MprisPlayer has no destroy(): unhook its proxies so it can be collected
-                p._mprisProxy?.disconnectObject(p);
-                p._playerProxy?.disconnectObject(p);
-            }
-            players.clear();
-            this._player = null;
-            this._playerName = null;
-        });
+        const media = nowPlaying(this._openDrops);
+        item.add_child(media);
+        for (const a of [sep, item]) {
+            media.bind_property('visible', a, 'visible', GObject.BindingFlags.SYNC_CREATE);
+            menu.addMenuItem(a);
+        }
+        addSettings(menu, 'Audio settings', 'sound');
     }
 
     destroy() {
@@ -828,6 +743,158 @@ class SoundItem extends StatusItem {
         this._control = null;
         this._sound = null;
     }
+}
+
+// now playing for the playing (else paused) MPRIS player, looked up and followed until `drops`
+// run; the widget hides while there is none. compact (Control Center): cover, title and buttons
+// on one line, no artist, progress or times.
+function nowPlaying(drops, compact = false) {
+    const col = new St.BoxLayout({vertical: true, x_expand: true, visible: false, style_class: 'mydock-media-box'});
+    const top = new St.BoxLayout({style_class: 'mydock-media-top', x_expand: true});
+    const cover = new St.Icon({style_class: 'mydock-media-cover', y_align: Clutter.ActorAlign.CENTER});
+    const text = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+    const title = new St.Label({style_class: 'mydock-media-title'});
+    const artist = new St.Label({style_class: 'mydock-media-artist', visible: !compact});
+    text.add_child(title);
+    text.add_child(artist);
+    top.add_child(cover);
+    top.add_child(text);
+    col.add_child(top);
+    const controls = new St.BoxLayout({style_class: 'mydock-media-controls', x_align: Clutter.ActorAlign.CENTER,
+        y_align: Clutter.ActorAlign.CENTER});
+    let player = null;
+    const button = (icon, fn) => {
+        const b = new St.Button({style_class: 'mydock-media-button', can_focus: true, child: new St.Icon({icon_name: icon})});
+        b.connect('clicked', () => player && fn(player));
+        controls.add_child(b);
+        return b;
+    };
+    const prev = button('media-skip-backward-symbolic', p => p.previous());
+    const play = button('media-playback-start-symbolic', p => p.playPause());
+    const next = button('media-skip-forward-symbolic', p => p.next());
+    let bar = null, elapsed, total;
+    if (compact) {
+        col.add_style_class_name('mydock-media-compact');
+        top.add_child(controls);
+    } else {
+        bar = new BarLevel({style_class: 'slider mydock-media-progress', x_expand: true});
+        const times = new St.BoxLayout({style_class: 'mydock-media-times'});
+        elapsed = new St.Label({x_expand: true});
+        total = new St.Label();
+        times.add_child(elapsed);
+        times.add_child(total);
+        for (const a of [bar, times, controls])
+            col.add_child(a);
+    }
+
+    const cancel = new Gio.Cancellable();
+    const players = new Map(); // bus name -> [MprisPlayer, signal ids]
+    let playerName = null;
+    let pos = null; // {us, t}: position at monotonic time t
+    let seekedId = 0;
+    let timerId = 0;
+
+    const length = () => player?._playerProxy?.Metadata?.['mpris:length']?.deepUnpack() ?? 0;
+    const tick = () => {
+        if (!pos || !bar)
+            return;
+        const playing = player?.status === 'Playing';
+        const us = pos.us + (playing ? GLib.get_monotonic_time() - pos.t : 0);
+        const len = length();
+        bar.value = len > 0 ? Math.min(us / len, 1) : 0;
+        elapsed.text = formatTime(us);
+        total.text = len > 0 ? formatTime(len) : '';
+    };
+    const fetchPosition = () => {
+        const name = playerName;
+        Gio.DBus.session.call(name, MPRIS_PATH, 'org.freedesktop.DBus.Properties', 'Get',
+            new GLib.Variant('(ss)', [MPRIS_PLAYER, 'Position']), new GLib.VariantType('(v)'),
+            Gio.DBusCallFlags.NONE, -1, cancel, (conn, res) => {
+                try {
+                    const [v] = conn.call_finish(res).deepUnpack();
+                    if (name === playerName) {
+                        pos = {us: Number(v.deepUnpack()), t: GLib.get_monotonic_time()};
+                        tick();
+                    }
+                } catch {} // cancelled, or the player has no position
+            });
+    };
+    const sync = () => {
+        const all = [...players.values()].map(([p]) => p);
+        const found = all.find(p => p.status === 'Playing') ?? all.find(p => p.status === 'Paused') ?? null;
+        const name = found ? [...players].find(([, [p]]) => p === found)[0] : null;
+        if (name !== playerName) {
+            if (seekedId)
+                Gio.DBus.session.signal_unsubscribe(seekedId);
+            seekedId = name ? Gio.DBus.session.signal_subscribe(name, MPRIS_PLAYER, 'Seeked', MPRIS_PATH, null,
+                Gio.DBusSignalFlags.NONE, (_c, _s, _p, _i, _n, params) => {
+                    pos = {us: Number(params.deepUnpack()[0]), t: GLib.get_monotonic_time()};
+                    tick();
+                }) : 0;
+            playerName = name;
+            pos = null;
+        }
+        player = found;
+        col.visible = !!player;
+        const playing = player?.status === 'Playing';
+        if (playing && !timerId && bar) {
+            timerId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, 1, () => {
+                tick();
+                return GLib.SOURCE_CONTINUE;
+            });
+        } else if (!playing && timerId) {
+            GLib.source_remove(timerId);
+            timerId = 0;
+        }
+        if (!player)
+            return;
+        cover.gicon = player.trackCoverUrl
+            ? new Gio.FileIcon({file: Gio.File.new_for_uri(player.trackCoverUrl)})
+            : themed('audio-x-generic-symbolic');
+        title.text = player.trackTitle ?? '';
+        artist.text = player.trackArtists?.join(', ') ?? '';
+        play.child.icon_name = playing ? 'media-playback-pause-symbolic' : 'media-playback-start-symbolic';
+        prev.reactive = !!player.canGoPrevious;
+        next.reactive = !!player.canGoNext;
+        if (bar)
+            fetchPosition(); // status or track changed: position jumps
+    };
+    const add = name => {
+        const p = new MprisPlayer(name);
+        players.set(name, [p, [
+            p.connect('changed', sync),
+            p.connect('closed', () => {
+                players.delete(name);
+                sync();
+            }),
+        ]]);
+    };
+
+    Gio.DBus.session.call('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'ListNames',
+        null, new GLib.VariantType('(as)'), Gio.DBusCallFlags.NONE, -1, cancel, (conn, res) => {
+            try {
+                const [names] = conn.call_finish(res).deepUnpack();
+                names.filter(n => n.startsWith(MPRIS_PREFIX)).forEach(add);
+            } catch {} // cancelled: menu closed meanwhile
+        });
+
+    drops.push(() => {
+        cancel.cancel();
+        if (seekedId)
+            Gio.DBus.session.signal_unsubscribe(seekedId);
+        if (timerId)
+            GLib.source_remove(timerId);
+        for (const [p, ids] of players.values()) {
+            ids.forEach(id => p.disconnect(id));
+            // MprisPlayer has no destroy(): unhook its proxies so it can be collected
+            p._mprisProxy?.disconnectObject(p);
+            p._playerProxy?.disconnectObject(p);
+        }
+        players.clear();
+        player = null;
+        playerName = null;
+    });
+    return col;
 }
 
 // ---- tray chevron: collapses / expands third-party indicators ----
@@ -916,60 +983,251 @@ class TrayItem {
     }
 }
 
-// ---- Control Center: GNOME quick settings as one icon ----
+// ---- Control Center: our own tile panel (reference screenshot 39) in place of GNOME's quick settings ----
 
 // QuickSettings indicator properties shown by our own status menus instead
 const DUPLICATE_INDICATORS = ['_network', '_bluetooth', '_volumeOutput', '_system', '_brightness',
     '_backlight', '_darkMode', '_nightLight', '_powerProfiles', '_rfkill'];
 
-class ControlCenter {
-    constructor(ext) {
-        const qs = Main.panel.statusArea.quickSettings;
-        if (!qs)
-            return;
-        this._qs = qs;
-        // detach only the indicators our own menus replace; privacy ones (camera, mic in use,
-        // location, screen sharing) stay. Detached, not hidden: they re-sync their own visibility.
-        const box = qs._indicators;
-        this._detached = [];
-        for (const name of DUPLICATE_INDICATORS) {
-            const actor = qs[name];
-            if (!box || !actor || actor.get_parent() !== box)
-                continue;
-            this._detached.push([actor, box.get_children().indexOf(actor)]);
-            box.remove_child(actor);
-        }
-        this._box = box;
+class ControlCenter extends StatusItem {
+    constructor(ext, parts) {
+        super('mydock-control-center', 'Control Center', 'emblem-system-symbolic');
+        this._ext = ext;
+        this._parts = parts; // the sibling items, whose backends the tiles reuse
+        this._notif = new Gio.Settings({schema_id: 'org.gnome.desktop.notifications'});
+        this.btn.add_style_class_name('mydock-control-center-button');
+        this.btn.menu.actor.add_style_class_name('mydock-control-center');
+        this.icon.add_style_class_name('mydock-control-center-icon');
         // optional theme icon, else the stock settings symbol
         const file = Gio.File.new_for_path(`${ext.path}/icons/mydock-control-center-symbolic.svg`);
-        this._icon = new St.Icon({
-            gicon: file.query_exists(null)
-                ? new Gio.FileIcon({file})
-                : new Gio.ThemedIcon({names: ['org.gnome.Settings-symbolic', 'emblem-system-symbolic']}),
-            style_class: 'system-status-icon mydock-control-center-icon',
-        });
-        // inside the indicator box (PanelMenu.Button only lays out its first child), last so the
-        // kept privacy indicators sit left of it
-        if (box)
-            box.add_child(this._icon);
+        this.icon.gicon = file.query_exists(null)
+            ? new Gio.FileIcon({file})
+            : new Gio.ThemedIcon({names: ['org.gnome.Settings-symbolic', 'emblem-system-symbolic']});
+
+        // GNOME's quick settings button goes away. Its indicator box moves onto our button, minus the
+        // ones our own menus replace, so the privacy indicators (camera, mic in use, location, screen
+        // sharing) stay. Detached, not hidden: they re-sync their own visibility.
+        const qs = Main.panel.statusArea.quickSettings;
+        this._qs = qs ?? null;
+        this._detached = [];
+        const box = qs?._indicators;
+        if (box) {
+            for (const name of DUPLICATE_INDICATORS) {
+                const actor = qs[name];
+                if (!actor || actor.get_parent() !== box)
+                    continue;
+                this._detached.push([actor, box.get_children().indexOf(actor)]);
+                box.remove_child(actor);
+            }
+            this._qsIndex = qs.get_children().indexOf(box);
+            qs.remove_child(box);
+            this._box.insert_child_at_index(box, 0);
+        }
+        if (qs) {
+            this._qsVisible = qs.container.visible;
+            qs.container.hide();
+        }
+        // Super+S opens ours (the prototype's version is back once this own property is deleted)
+        Main.panel.toggleQuickSettings = () => Main.panel._toggleMenu(this.btn);
+    }
+
+    _find(T) {
+        return this._parts.find(p => p instanceof T) ?? null;
+    }
+
+    // close, then show the item's own menu (its panel when the item is hidden)
+    _openItem(part, panel) {
+        this.btn.menu.close();
+        if (part?.btn.container.visible)
+            part.btn.menu.toggle();
         else
-            qs.insert_child_at_index(this._icon, 0);
-        qs.add_style_class_name('mydock-control-center-button');
-        qs.menu.actor.add_style_class_name('mydock-control-center');
+            openPanel(panel);
+    }
+
+    _fill(menu) {
+        const wifi = this._find(WifiItem);
+        const bt = this._find(BluetoothItem);
+        const drops = this._openDrops;
+        const syncs = []; // tile updaters, rerun on any state change while open
+        const sync = () => syncs.forEach(f => f());
+        const box = (style_class, vertical = false) => new St.BoxLayout({style_class, vertical, x_expand: true});
+        const row = () => {
+            const b = box('mydock-cc-row');
+            b.layout_manager.homogeneous = true;
+            return b;
+        };
+
+        const item = new PopupMenu.PopupBaseMenuItem({activate: false, hover: false, can_focus: false, style_class: 'mydock-cc-item'});
+        const grid = box('mydock-cc', true);
+        item.add_child(grid);
+        menu.addMenuItem(item);
+        const top = row();
+        grid.add_child(top);
+
+        // left tile: radios. The chip toggles, the name opens that item's own menu.
+        const radios = box('mydock-cc-tile mydock-cc-radios', true);
+        top.add_child(radios);
+        const radio = (name, icon, part, isOn, toggle, subtitle = () => '') => {
+            const line = box('mydock-cc-radio');
+            const c = chip(themed(icon), false, true);
+            c.connect('clicked', () => toggle());
+            const text = new St.BoxLayout({vertical: true, y_align: Clutter.ActorAlign.CENTER});
+            const title = new St.Label({text: name, style_class: 'mydock-cc-title'});
+            const sub = new St.Label({style_class: 'mydock-cc-subtitle'});
+            text.add_child(title);
+            text.add_child(sub);
+            const label = new St.Button({child: text, x_expand: true, can_focus: true, style_class: 'mydock-cc-label'});
+            label.connect('clicked', () => this._openItem(part, name === 'Bluetooth' ? 'bluetooth' : 'wifi'));
+            line.add_child(c);
+            line.add_child(label);
+            radios.add_child(line);
+            syncs.push(() => {
+                c.checked = isOn();
+                c.reactive = !part || part.btn.container.visible; // no hardware: nothing to toggle
+                sub.text = subtitle();
+                sub.visible = !!sub.text;
+            });
+        };
+
+        const nm = wifi?._client;
+        radio('Wi-Fi', 'network-wireless-signal-excellent-symbolic', wifi, () => !!nm?.wireless_enabled,
+            () => nm && (nm.wireless_enabled = !nm.wireless_enabled), () => {
+                const ssid = nm?.wireless_enabled && wifi._device?.active_access_point?.get_ssid();
+                return ssid ? wifi._NM.utils_ssid_to_utf8(ssid.get_data()) : '';
+            });
+        if (nm) {
+            this._connect(nm, 'notify::wireless-enabled', sync, drops);
+            if (wifi._device)
+                this._connect(wifi._device, 'notify::active-access-point', sync, drops);
+        }
+
+        const bc = bt?._client;
+        radio('Bluetooth', 'bluetooth-active-symbolic', bt, () => !!bc?.default_adapter_powered,
+            () => bc && bt._setPowered(!bc.default_adapter_powered), () => {
+                if (!bc?.default_adapter_powered)
+                    return '';
+                // ponytail: names are read on open and on power changes, not per device connect
+                const store = bc.get_devices();
+                const names = [];
+                for (let i = 0; i < store.get_n_items(); i++) {
+                    const d = store.get_item(i);
+                    if (d.connected)
+                        names.push(d.alias || d.name);
+                }
+                return names.join(', ');
+            });
+        if (bc)
+            this._connect(bc, 'notify::default-adapter-powered', sync, drops);
+
+        // ponytail: the shell has no simple hotspot API (NM needs a shared AP connection), so
+        // Hotspot opens the Wi-Fi panel where it is switched on
+        radio('Hotspot', 'network-wireless-hotspot-symbolic', null, () => false,
+            () => this._openItem(null, 'wifi'));
+
+        // right column: Focus, then Stage Manager and Screen Mirroring squares
+        const right = box('mydock-cc-column', true);
+        top.add_child(right);
+        const focusChip = chip(themed('weather-clear-night-symbolic'));
+        const focusBox = new St.BoxLayout({style_class: 'mydock-cc-radio'});
+        focusBox.add_child(focusChip);
+        focusBox.add_child(new St.Label({text: 'Focus', style_class: 'mydock-cc-title', y_align: Clutter.ActorAlign.CENTER}));
+        const focus = new St.Button({child: focusBox, can_focus: true, x_expand: true, y_expand: true,
+            style_class: 'mydock-cc-tile mydock-cc-focus'});
+        // Focus on = notification banners off
+        focus.connect('clicked', () => this._notif.set_boolean('show-banners', !this._notif.get_boolean('show-banners')));
+        syncs.push(() => {
+            const on = !this._notif.get_boolean('show-banners');
+            focus.checked = on;
+            on ? focusChip.add_style_pseudo_class('checked') : focusChip.remove_style_pseudo_class('checked');
+        });
+        this._connect(this._notif, 'changed::show-banners', sync, drops);
+        right.add_child(focus);
+
+        const squares = row();
+        right.add_child(squares);
+        const square = (text, icon, fn) => {
+            const b = new St.Button({can_focus: true, x_expand: true, style_class: 'mydock-cc-tile mydock-cc-square'});
+            const v = new St.BoxLayout({vertical: true, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
+            v.add_child(new St.Icon({gicon: themed(icon), style_class: 'mydock-cc-square-icon', x_align: Clutter.ActorAlign.CENTER}));
+            v.add_child(new St.Label({text, style_class: 'mydock-cc-square-label', x_align: Clutter.ActorAlign.CENTER}));
+            b.child = v;
+            b.connect('clicked', fn);
+            squares.add_child(b);
+            return b;
+        };
+        const settings = this._ext.settings;
+        const stage = square('Stage\nManager', 'sidebar-show-symbolic',
+            () => settings.set_boolean('stage-manager', !settings.get_boolean('stage-manager')));
+        syncs.push(() => (stage.checked = settings.get_boolean('stage-manager')));
+        this._connect(settings, 'changed::stage-manager', sync, drops);
+        square('Screen\nMirroring', 'video-joined-displays-symbolic', () => {
+            this.btn.menu.close();
+            const app = Shell.AppSystem.get_default().lookup_app('org.gnome.NetworkDisplays.desktop');
+            if (app)
+                app.activate();
+            else
+                openPanel('display');
+        });
+
+        // slider tiles: heading, slider, optional trailing button
+        const sliderTile = (name, s, trailing = null) => {
+            const tile = box('mydock-cc-tile mydock-cc-slider', true);
+            tile.add_child(new St.Label({text: name, style_class: 'mydock-cc-title'}));
+            const line = box('mydock-cc-slider-line');
+            line.add_child(s.actor);
+            if (trailing)
+                line.add_child(trailing);
+            tile.add_child(line);
+            grid.add_child(tile);
+        };
+        const brightness = this._find(DisplayItem)?.brightnessSlider(drops);
+        if (brightness)
+            sliderTile('Display', brightness);
+
+        const sound = this._find(SoundItem);
+        if (sound?._stream) {
+            const source = sound._control.get_default_source();
+            let mic = null;
+            if (source) {
+                mic = chip(themed('audio-input-microphone-symbolic'), false, true);
+                mic.add_style_class_name('mydock-cc-mic');
+                mic.accessible_name = 'Microphone';
+                mic.connect('clicked', () => source.change_is_muted(!source.is_muted));
+                const syncMic = () => (mic.child.gicon = themed(source.is_muted
+                    ? 'microphone-sensitivity-muted-symbolic' : 'audio-input-microphone-symbolic'));
+                this._connect(source, 'notify::is-muted', syncMic, drops);
+                syncMic();
+            }
+            sliderTile('Sound', sound.volumeSlider(drops), mic);
+        }
+
+        const media = nowPlaying(drops, true);
+        const mediaTile = box('mydock-cc-tile mydock-cc-media');
+        mediaTile.add_child(media);
+        media.bind_property('visible', mediaTile, 'visible', GObject.BindingFlags.SYNC_CREATE);
+        grid.add_child(mediaTile);
+
+        sync();
     }
 
     destroy() {
-        if (!this._qs)
-            return;
-        this._icon.destroy();
+        delete Main.panel.toggleQuickSettings;
+        const qs = this._qs;
+        const box = qs?._indicators;
+        if (box?.get_parent() === this._box) {
+            this._box.remove_child(box);
+            qs.insert_child_at_index(box, Math.max(this._qsIndex, 0));
+        }
         // undo in reverse: each index was taken after the earlier removals
         for (const [actor, index] of this._detached.reverse())
-            this._box.insert_child_at_index(actor, Math.min(index, this._box.get_n_children()));
+            box.insert_child_at_index(actor, Math.min(index, box.get_n_children()));
         this._detached = [];
-        this._qs.remove_style_class_name('mydock-control-center-button');
-        this._qs.menu.actor.remove_style_class_name('mydock-control-center');
+        if (qs)
+            qs.container.visible = this._qsVisible;
         this._qs = null;
-        this._box = null;
+        super.destroy();
+        this._notif = null;
+        this._parts = null;
     }
 }
 
@@ -991,7 +1249,7 @@ export class StatusMenus {
         if (on && !this._parts.length) {
             for (const Part of PARTS) {
                 try {
-                    this._parts.push(new Part(this._ext));
+                    this._parts.push(new Part(this._ext, this._parts));
                 } catch (e) {
                     logError(e, `MyDock: ${Part.name} failed to start`);
                 }
