@@ -398,8 +398,16 @@ window.mydock-window.mydock-dark {
     -gtk-icon-size: 14px;
     -gtk-icon-source: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScxNicgaGVpZ2h0PScxNicgdmlld0JveD0nMCAwIDE2IDE2Jz48cGF0aCBkPSdNNSA2LjMgOCAzLjVsMyAyLjhNNSA5LjdsMyAyLjggMy0yLjgnIGZpbGw9J25vbmUnIHN0cm9rZT0nI2ZmZicgc3Ryb2tlLXdpZHRoPScxLjcnIHN0cm9rZS1saW5lY2FwPSdyb3VuZCcgc3Ryb2tlLWxpbmVqb2luPSdyb3VuZCcvPjwvc3ZnPg==");
 }
-.mydock-prefs button.mydock-pill shortcut > * {
+/* shortcut keys as plain text inside the pill, not separate keycaps */
+.mydock-prefs button.mydock-pill shortcut > label {
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    box-shadow: none;
     font-weight: 700;
+    font-size: inherit;
 }
 .mydock-prefs button.mydock-clear {
     min-height: 20px;
