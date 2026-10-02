@@ -122,8 +122,10 @@ function valueSlider(value, onChange) {
     const slider = new Slider(value);
     slider.add_style_class_name('mydock-slider');
     slider.x_expand = true;
+    // BinLayout only honours x_align START for an x_expand child, else it centres it
     const label = new St.Label({
         style_class: 'mydock-slider-value',
+        x_expand: true,
         x_align: Clutter.ActorAlign.START,
         y_align: Clutter.ActorAlign.CENTER,
     });
@@ -132,6 +134,8 @@ function valueSlider(value, onChange) {
     actor.add_child(label);
     // ui/slider.js draws the knob centre at r + (width - 2r) * value, r = ceil(radius + border)
     const place = () => {
+        if (!actor.has_allocation())
+            return; // not laid out yet: notify::width brings us back
         const r = Math.ceil(slider._handleRadius + slider._handleBorderWidth);
         let x = r + (slider.width - 2 * r) * slider.value;
         if (slider.get_text_direction() === Clutter.TextDirection.RTL)
@@ -1071,7 +1075,7 @@ class ControlCenter extends StatusItem {
             const line = box('mydock-cc-radio');
             const c = chip(themed(icon), false, true);
             c.connect('clicked', () => toggle());
-            const text = new St.BoxLayout({vertical: true, y_align: Clutter.ActorAlign.CENTER});
+            const text = new St.BoxLayout({vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
             const title = new St.Label({text: name, style_class: 'mydock-cc-title'});
             const sub = new St.Label({style_class: 'mydock-cc-subtitle'});
             text.add_child(title);
@@ -1128,7 +1132,7 @@ class ControlCenter extends StatusItem {
         const right = box('mydock-cc-column', true);
         top.add_child(right);
         const focusChip = chip(themed('weather-clear-night-symbolic'));
-        const focusBox = new St.BoxLayout({style_class: 'mydock-cc-radio'});
+        const focusBox = new St.BoxLayout({style_class: 'mydock-cc-radio', x_expand: true});
         focusBox.add_child(focusChip);
         focusBox.add_child(new St.Label({text: 'Focus', style_class: 'mydock-cc-title', y_align: Clutter.ActorAlign.CENTER}));
         const focus = new St.Button({child: focusBox, can_focus: true, x_expand: true, y_expand: true,
@@ -1145,10 +1149,12 @@ class ControlCenter extends StatusItem {
 
         const squares = row();
         right.add_child(squares);
+        // our own drawings of the reference's icons (no stock symbolic looks like them)
         const square = (text, icon, fn) => {
+            const file = Gio.File.new_for_path(`${this._ext.path}/icons/mydock-${icon}-symbolic.svg`);
             const b = new St.Button({can_focus: true, x_expand: true, style_class: 'mydock-cc-tile mydock-cc-square'});
             const v = new St.BoxLayout({vertical: true, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
-            v.add_child(new St.Icon({gicon: themed(icon), style_class: 'mydock-cc-square-icon', x_align: Clutter.ActorAlign.CENTER}));
+            v.add_child(new St.Icon({gicon: new Gio.FileIcon({file}), style_class: 'mydock-cc-square-icon', x_align: Clutter.ActorAlign.CENTER}));
             v.add_child(new St.Label({text, style_class: 'mydock-cc-square-label', x_align: Clutter.ActorAlign.CENTER}));
             b.child = v;
             b.connect('clicked', fn);
@@ -1156,11 +1162,11 @@ class ControlCenter extends StatusItem {
             return b;
         };
         const settings = this._ext.settings;
-        const stage = square('Stage\nManager', 'sidebar-show-symbolic',
+        const stage = square('Stage\nManager', 'stage-manager',
             () => settings.set_boolean('stage-manager', !settings.get_boolean('stage-manager')));
         syncs.push(() => (stage.checked = settings.get_boolean('stage-manager')));
         this._connect(settings, 'changed::stage-manager', sync, drops);
-        square('Screen\nMirroring', 'video-joined-displays-symbolic', () => {
+        square('Screen\nMirroring', 'screen-mirroring', () => {
             this.btn.menu.close();
             const app = Shell.AppSystem.get_default().lookup_app('org.gnome.NetworkDisplays.desktop');
             if (app)
