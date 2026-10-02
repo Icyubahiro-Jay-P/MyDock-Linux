@@ -13,42 +13,50 @@ import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/ex
 
 import {compareVersions} from './version.js';
 
-// [page title, icon, badge color, [[group title, [key, ...], footnote?], ...], header?]
-// A plain string starts a new titled section in the sidebar.
+// [page title, icon, badge color, groups, style?]
+// A group is [title, [key, ...], footnote?] or the name of a custom builder in CUSTOM_GROUPS.
+// style 'cards' draws each group as a rounded card; other pages are a plain list like the
+// MyDock and MyFinder pages of the reference. A plain string starts a new sidebar section.
 const PAGES = [
     ['General', 'preferences-system-symbolic', 'graphite', [
-        ['Theme', ['theme-path'],
+        ['', ['finderbar-enabled', 'dock-enabled']],
+        'appearance',
+        ['', ['theme-path'],
             'A theme folder holds a stylesheet.css and an icons/ folder. Leave it empty for the built-in look.'],
-    ], 'appearance'],
-    ['Stage Manager', 'view-dual-symbolic', 'cyan', [
+    ], 'cards'],
+    ['Stage Manager', 'view-dual-symbolic', 'blue', [
         ['', ['stage-manager'],
             'Stage Manager keeps the current window in the center and arranges your other windows in a strip on the left.'],
-        ['Strip', ['stage-count', 'stage-size', 'stage-show-title']],
-    ]],
-    ['Effects', 'applications-graphics-symbolic', 'maroon', [
-        ['Minimize', ['minimize-effect', 'minimize-duration']],
-        ['Launchpad', ['launchpad-hotkey'], 'Click the shortcut to record a new one.'],
-    ]],
+        ['', ['stage-show-title', 'stage-count', 'stage-size']],
+    ], 'cards'],
     'MyDock',
-    ['Dock', 'view-app-grid-symbolic', 'blue', [
-        ['', ['dock-enabled', 'autohide', 'multi-monitor', 'edge-distance']],
-        ['Icons', ['icon-size', 'magnify', 'max-size', 'icon-space', 'bounce-on-launch', 'show-labels', 'show-running-dots']],
-        ['Background', ['blur', 'blur-windows', 'opacity'],
+    ['Look & Behaviour', 'video-single-display-symbolic', 'dark', [
+        'preview',
+        ['', ['icon-size', 'magnify', 'max-size', 'icon-space', 'edge-distance', 'blur', 'blur-windows', 'opacity'],
             'Blurring windows behind the Dock costs more and leaves the corner tips slightly blurred.'],
-        ['Extra icons', ['show-launchpad', 'show-trash', 'show-calendar', 'show-clock']],
-    ], 'preview'],
+    ]],
+    ['Launchpad', 'view-app-grid-symbolic', 'dark', [
+        ['', ['show-launchpad', 'launchpad-hotkey'], 'Click the shortcut to record a new one.'],
+    ]],
+    ['Advanced', 'emblem-system-symbolic', 'grey', [
+        ['', ['autohide', 'multi-monitor', 'show-labels', 'show-running-dots', 'bounce-on-launch',
+            'show-trash', 'show-calendar', 'show-clock']],
+    ]],
+    ['Minimize Effects', 'focus-windows-symbolic', 'blue', [
+        ['', ['minimize-effect', 'minimize-duration']],
+    ]],
     'MyFinder',
-    ['Finder Bar', 'preferences-desktop-display-symbolic', 'purple', [
-        ['', ['finderbar-enabled', 'finderbar-blur', 'finderbar-status-menus']],
-        ['System stats', ['finderbar-stats', 'stats-cpu', 'stats-temp', 'stats-mem', 'stats-disk', 'stats-net'],
-            'Pick which meters appear in the top bar.'],
-        ['Menu and clock', ['logo-path', 'time-format'],
-            'The clock uses GLib strftime codes, for example %a %-d %b  %-I:%M %p.'],
+    ['Look & Behaviour', 'focus-top-bar-symbolic', 'dark', [
+        ['', ['logo-path', 'finderbar-blur', 'finderbar-status-menus', 'window-buttons-left', 'traffic-lights'],
+            'Traffic light colors apply to GTK apps you open next; restart open apps to see them.'],
     ]],
-    ['Windows', 'focus-windows-symbolic', 'red', [
-        ['Title bar buttons', ['window-buttons-left', 'traffic-lights'],
-            'Puts close, minimize and maximize on the left like macOS. Traffic light colors apply to GTK apps you open next; restart open apps to see them.'],
+    ['Time & Date', 'x-office-calendar-symbolic', 'blue', [
+        ['', ['time-format'], 'The clock uses GLib strftime codes, for example %a %-d %b  %-I:%M %p.'],
     ]],
+    ['Hardware Status', 'mydock-cpu-symbolic', 'red', [
+        ['', ['finderbar-stats']],
+        ['', ['stats-cpu']], ['', ['stats-temp']], ['', ['stats-mem']], ['', ['stats-disk']], ['', ['stats-net']],
+    ], 'cards'],
     'More',
     // groups are built by _aboutSections (hero, Software Update, Support, GitHub)
     ['About', 'help-about-symbolic', 'grey', [], 'about'],
@@ -56,54 +64,64 @@ const PAGES = [
 
 // Friendlier titles than the schema summaries (the summary is the fallback).
 const TITLES = {
-    'dock-enabled': 'Show the Dock',
+    'dock-enabled': 'Enable myDock',
     'autohide': 'Automatically hide and show the Dock',
-    'multi-monitor': 'Show on all displays',
-    'edge-distance': 'Distance from screen edge',
-    'icon-size': 'Size',
-    'magnify': 'Magnification',
-    'max-size': 'Magnified size',
-    'icon-space': 'Spacing',
+    'multi-monitor': 'Show the Dock on all displays',
+    'edge-distance': 'Dock distance from screen edge',
+    'icon-size': 'Icon size',
+    'magnify': 'Magnify icons on hover',
+    'max-size': 'Icon magnification',
+    'icon-space': 'Distance between icons',
     'bounce-on-launch': 'Animate opening applications',
     'show-labels': 'Show app names on hover',
     'show-running-dots': 'Show indicators for open applications',
-    'blur': 'Blur',
+    'blur': 'Background blur intensity',
     'blur-windows': 'Blur windows behind the Dock',
-    'opacity': 'Opacity',
-    'show-launchpad': 'Launchpad',
-    'show-trash': 'Trash',
-    'show-calendar': 'Live calendar',
-    'show-clock': 'Live clock',
-    'finderbar-enabled': 'Show the Finder bar',
-    'finderbar-blur': 'Translucent background',
-    'finderbar-status-menus': 'Status menus and Control Center',
-    'finderbar-stats': 'Show system stats',
-    'stats-cpu': 'CPU usage',
-    'stats-temp': 'CPU temperature',
-    'stats-mem': 'Memory usage',
-    'stats-disk': 'Disk usage',
-    'stats-net': 'Network upload and download',
-    'logo-path': 'Menu logo',
-    'time-format': 'Clock format',
-    'window-buttons-left': 'Buttons on the left (macOS order)',
-    'traffic-lights': 'Red, yellow and green buttons',
-    'stage-manager': 'Stage Manager',
+    'opacity': 'Background opacity',
+    'show-launchpad': 'Show Launchpad in the Dock',
+    'show-trash': 'Show Trash in the Dock',
+    'show-calendar': 'Show a live calendar in the Dock',
+    'show-clock': 'Show a live clock in the Dock',
+    'finderbar-enabled': 'Enable myFinder',
+    'finderbar-blur': 'Translucent Finder background',
+    'finderbar-status-menus': 'Show status menus and Control Center in Finder',
+    'finderbar-stats': 'Show hardware status in Finder',
+    'stats-cpu': 'Processor',
+    'stats-temp': 'Temperatures',
+    'stats-mem': 'Memory',
+    'stats-disk': 'Storage',
+    'stats-net': 'Network',
+    'logo-path': 'MyFinder menu icon',
+    'time-format': 'Time format',
+    'window-buttons-left': 'Window buttons on the left (macOS order)',
+    'traffic-lights': 'Red, yellow and green window buttons',
+    'stage-manager': 'Enable Stage Manager',
     'stage-count': 'Groups in the strip',
-    'stage-size': 'Thumbnail width',
+    'stage-size': 'Window list icon size',
     'stage-show-title': 'Show window titles',
-    'minimize-effect': 'Minimize windows using',
-    'minimize-duration': 'Animation length',
-    'launchpad-hotkey': 'Open Launchpad',
+    'minimize-effect': 'Minimize animation',
+    'minimize-duration': 'Minimize animation length',
+    'launchpad-hotkey': 'Show Launchpad shortcut',
     'theme-path': 'Theme folder',
     'check-updates': 'Check for updates automatically',
 };
+
+// Booleans drawn as a switch on the right; every other boolean is a checkbox.
+const SWITCHES = new Set(['dock-enabled', 'finderbar-enabled', 'stage-manager', 'finderbar-stats',
+    'stats-cpu', 'stats-temp', 'stats-mem', 'stats-disk', 'stats-net', 'check-updates']);
+// Large glyph in front of a switch row (Hardware Status cards).
+const ROW_ICONS = {
+    'stats-cpu': 'mydock-cpu-symbolic', 'stats-temp': 'mydock-temp-symbolic', 'stats-mem': 'mydock-memory-symbolic',
+    'stats-disk': 'mydock-disk-symbolic', 'stats-net': 'mydock-network-symbolic',
+};
+const CUSTOM_GROUPS = {appearance: appearanceGroup, preview: previewGroup};
 
 const ENUM_ROWS = {
     'minimize-effect': ['none', 'scale', 'genie', 'suck'],
 };
 // dark-mode values shown as thumbnail cards on the General page
 const APPEARANCES = [['Light', 1, 'light'], ['Dark', 2, 'dark'], ['Follow OS', 0, 'auto']];
-// Int keys shown as a slider with this unit (other int keys get a spin button).
+// Int keys are sliders; the unit shows in the tooltip since the reference sliders have no value label.
 const SLIDER_UNITS = {
     'icon-size': 'px', 'max-size': 'px', 'icon-space': 'px', 'edge-distance': 'px',
     'blur': 'px', 'opacity': '%', 'stage-size': 'px', 'minimize-duration': 'ms',
@@ -201,33 +219,36 @@ export default class MyDockPrefs extends ExtensionPreferences {
                 headers.push({row, pages: []});
                 continue;
             }
-            const [title, icon, color, groups, extra] = def;
-            const page = new Adw.PreferencesPage();
-            const entry = {title, sections: [], row: sidebarRow(title, icon, color)};
+            const [title, icon, color, groups, style] = def;
+            // list pages drop the card chrome; cards stay on the top pages and About
+            const page = new Adw.PreferencesPage({css_classes: style ? [] : ['mydock-list']});
+            const entry = {title, page, sections: [], row: sidebarRow(title, icon, color)};
             entry.row._page = entry;
             headers.at(-1)?.pages.push(entry);
-            if (extra === 'appearance') {
-                const group = appearanceGroup(settings);
-                entry.sections.push(this._section(page, group, [{row: group._picker, text: 'appearance light dark follow os mode'}]));
-            }
-            if (extra === 'preview')
-                entry.sections.push(this._section(page, previewGroup(settings), []));
-            if (extra === 'about')
+            if (style === 'about')
                 entry.sections.push(...this._aboutSections(page, window, settings, schema));
-            for (const [gTitle, keys, note] of groups) {
+            for (const def of groups) {
+                if (typeof def === 'string') {
+                    const group = CUSTOM_GROUPS[def](settings);
+                    entry.sections.push(this._section(page, group, group._search ? [group._search] : []));
+                    continue;
+                }
+                const [gTitle, keys, note] = def;
                 const group = new Adw.PreferencesGroup({title: gTitle});
                 const rows = keys.map(key => {
-                    const row = this._row(settings, schema.get_key(key), key);
+                    const rowTitle = TITLES[key] ?? schema.get_key(key).get_summary() ?? key;
+                    const row = this._row(settings, schema.get_key(key), key, rowTitle);
                     if (DEPENDS[key])
                         settings.bind(DEPENDS[key], row, 'sensitive', Gio.SettingsBindFlags.GET);
                     group.add(row);
-                    return {row, text: `${row.title} ${key}`.toLowerCase()};
+                    return {row, text: `${rowTitle} ${key}`.toLowerCase()};
                 });
                 if (note)
                     group.add(new Gtk.Label({label: note, xalign: 0, wrap: true, css_classes: ['dim-label', 'caption', 'mydock-footnote']}));
                 entry.sections.push(this._section(page, group, rows));
             }
-            stack.add_named(page, title);
+            // titles repeat across sections (Look & Behaviour), so pages are keyed by object
+            stack.add_child(page);
             list.append(entry.row);
             pages.push(entry);
         }
@@ -235,8 +256,8 @@ export default class MyDockPrefs extends ExtensionPreferences {
         list.connect('row-selected', (_l, row) => {
             if (!row?._page)
                 return;
-            const {title} = row._page;
-            stack.visible_child_name = title;
+            const {title, page} = row._page;
+            stack.visible_child = page;
             titleLabel.label = title;
             contentPage.title = title;
         });
