@@ -2,7 +2,8 @@
 import assert from 'node:assert/strict';
 import {
     parseCpuStat, cpuUsage, parseSensors, parseCpuModel, parseMemTotal,
-    parseOsRelease, formatModel, parseLspciGpu,
+    parseOsRelease, formatModel, parseLspciGpu, parseCoreStats, parseMemInfo, parseNetDev,
+    formatRate, formatBytes,
 } from './sysinfo.js';
 
 const a = parseCpuStat('cpu  100 0 100 700 100 0 0 0 0 0\ncpu0 1 2 3');
@@ -26,4 +27,14 @@ assert.equal(parseLspciGpu('00:00.0 "Host bridge" "Intel Corporation" "Xeon"\n' 
     '01:00.0 "3D controller" "Advanced Micro Devices, Inc. [AMD/ATI]" "Navi 23"\n'),
 'Intel HD Graphics 520\nAMD/ATI Navi 23');
 assert.equal(parseLspciGpu(''), null);
+
+assert.deepEqual(parseCoreStats('cpu  9 9 9 9\ncpu0 1 0 1 8\ncpu1 2 0 2 6\nintr 5'),
+    [{total: 10, idle: 8}, {total: 10, idle: 6}]);
+assert.deepEqual(parseMemInfo('MemTotal: 4 kB\nMemAvailable: 1 kB\nSwapTotal: 2 kB\nSwapFree: 2 kB\n'),
+    {total: 4096, avail: 1024, swapTotal: 2048, swapFree: 2048});
+assert.equal(parseMemInfo(''), null);
+assert.deepEqual(parseNetDev('h1\nh2\n    lo: 50 0 0 0 0 0 0 0 60\n  eth0: 100 0 0 0 0 0 0 0 7 0\n'), {rx: 100, tx: 7});
+assert.equal(formatRate(0), '0B/s');
+assert.equal(formatRate(1536), '1.5KB/s');
+assert.equal(formatBytes(8 * 1024 ** 3), '8.0 GB');
 console.log('aboutpc ok');
