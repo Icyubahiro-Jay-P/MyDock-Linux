@@ -4,7 +4,7 @@ Thanks for helping. Small, focused pull requests are the easiest to review.
 
 ## Dev setup
 
-You need GNOME Shell 46, 47 or 48, plus:
+You need GNOME Shell 46 to 50, plus:
 
 - `glib-compile-schemas` (Ubuntu: `libglib2.0-bin`)
 - `dpkg-deb` (for the .deb build)
@@ -38,10 +38,18 @@ shellcheck build.sh install.sh install-stub.sh
 
 ## Testing in a nested shell
 
-On GNOME 46 to 48 you can run a second GNOME Shell in a window, so a crash does not take down your session:
+You can run a second GNOME Shell in a window, so a crash does not take down your session.
+
+On GNOME 46 to 48:
 
 ```bash
 dbus-run-session -- gnome-shell --nested --wayland
+```
+
+On GNOME 49 and 50 `--nested` is gone; use `--devkit` instead (it needs the Mutter devkit viewer, which your distribution ships with its Mutter development tools):
+
+```bash
+dbus-run-session -- gnome-shell --devkit --wayland
 ```
 
 Watch the logs in another terminal:
@@ -100,7 +108,7 @@ New settings go in `extension/schemas/org.gnome.shell.extensions.mydock.gschema.
 - [ ] `node extension/deform-math.test.mjs` passes
 - [ ] `./build.sh` succeeds
 - [ ] `shellcheck` is clean for any shell script you touched
-- [ ] Tested on GNOME Shell 46, 47 or 48 (say which, and X11 or Wayland)
+- [ ] Tested on GNOME Shell 46 to 50 (say which, and X11 or Wayland)
 - [ ] Disable then enable the extension: no leftovers, no errors in the log
 - [ ] New settings are in the schema and in `prefs.js`
 - [ ] README updated if behavior or settings changed

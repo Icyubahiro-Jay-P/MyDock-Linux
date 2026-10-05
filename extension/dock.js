@@ -4,6 +4,7 @@
 
 import Cairo from 'cairo';
 import Clutter from 'gi://Clutter';
+import Cogl from 'gi://Cogl';
 import GObject from 'gi://GObject';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -65,7 +66,7 @@ cogl_color_out *= clamp(0.5 - d, 0.0, 1.0);
 const RoundedMask = GObject.registerClass(
 class MyDockRoundedMask extends Shell.GLSLEffect {
     vfunc_build_pipeline() {
-        this.add_glsl_snippet(Shell.SnippetHook.FRAGMENT, MASK_DECL, MASK_CODE, false);
+        this.add_glsl_snippet(Cogl.SnippetHook.FRAGMENT, MASK_DECL, MASK_CODE, false);
     }
 
     setShape(stripW, stripH, x, y, w, h, r) {

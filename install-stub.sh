@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# MY DOCK FINDER FOR LINUX single-file installer for GNOME Shell 46-48 (Ubuntu 24.04+).
+# MY DOCK FINDER FOR LINUX single-file installer for GNOME Shell 46-50 (Ubuntu 24.04+).
 #   bash dock-install.sh              install / update
 #   bash dock-install.sh --uninstall  remove and restore the previous dock
 set -euo pipefail
@@ -15,7 +15,7 @@ SYS="/usr/share/gnome-shell/extensions/$UUID"
 DOCKS=(ubuntu-dock@ubuntu.com dash-to-dock@micxgx.gmail.com dash2dock-lite@icedman.github.com)
 EFFECTS=(compiz-alike-magic-lamp-effect@hermes83.github.com burn-my-windows@schneegans.github.com compiz-windows-effect@hermes83.github.com)
 # Keep in sync with "shell-version" in metadata.json: GNOME refuses to load the extension on other versions.
-MIN_SHELL=46 MAX_SHELL=48
+MIN_SHELL=46 MAX_SHELL=50
 
 is_enabled()  { gsettings get org.gnome.shell enabled-extensions | grep -q "'$1'"; }
 is_disabled() { gsettings get org.gnome.shell disabled-extensions | grep -q "'$1'"; }

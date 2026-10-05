@@ -147,7 +147,9 @@ export class Launchpad {
         // above the windows, below the panel and the dock
         Main.uiGroup.insert_child_above(this._actor, global.window_group);
         this._grab = Main.pushModal(this._actor, {actionMode: Shell.ActionMode.POPUP});
-        if ((this._grab.get_seat_state() & Clutter.GrabState.KEYBOARD) === 0) {
+        // GNOME 50 dropped get_seat_state(): its grabs always take the keyboard
+        const seat = this._grab.get_seat_state?.() ?? Clutter.GrabState?.KEYBOARD;
+        if (seat !== undefined && (seat & Clutter.GrabState.KEYBOARD) === 0) {
             // another modal owns the keyboard: back out instead of opening half working
             Main.popModal(this._grab);
             this._grab = null;

@@ -29,6 +29,12 @@ const RECENT_MAX = 10;
 // strftime conversions that show seconds (%S %s %T %r %X %c %f, with optional flags/E/O); %% is a literal
 const SECONDS_RE = /%[-_0^#]*[EO]?[sSTrXcf]/;
 
+// Mutter 49 replaced get_maximized() / maximize(flags) / unmaximize(flags) with
+// get_maximize_flags() and flagless maximize() / unmaximize(); support both.
+const maximizeFlags = win => win.get_maximize_flags?.() ?? win.get_maximized();
+const maximize = win => win.is_maximized ? win.maximize() : win.maximize(Meta.MaximizeFlags.BOTH);
+const unmaximize = win => win.is_maximized ? win.unmaximize() : win.unmaximize(Meta.MaximizeFlags.BOTH);
+
 const STATS_SECONDS = 2;
 // [stat key (settings key is stats-<key>), icon file in icons/mydock-<icon>-symbolic.svg, name]
 const STATS = [
@@ -342,16 +348,15 @@ export class FinderBar {
 
     _fillWindow(menu) {
         const [app, win] = this._target();
-        const BOTH = Meta.MaximizeFlags.BOTH;
         this._addItem(menu, 'Minimize', win?.can_minimize(), () => win.minimize());
-        this._addItem(menu, 'Zoom', win?.can_maximize(), () => win.get_maximized() === BOTH
-            ? win.unmaximize(BOTH) : win.maximize(BOTH));
+        this._addItem(menu, 'Zoom', win?.can_maximize(), () => maximizeFlags(win) === Meta.MaximizeFlags.BOTH
+            ? unmaximize(win) : maximize(win));
         // half of the work area; mutter's own tiling isn't exposed to JS
         const tile = right => {
             const area = win.get_work_area_current_monitor();
             const w = Math.floor(area.width / 2);
-            if (win.get_maximized())
-                win.unmaximize(BOTH);
+            if (maximizeFlags(win))
+                unmaximize(win);
             win.move_resize_frame(true, right ? area.x + area.width - w : area.x, area.y, w, area.height);
         };
         this._addItem(menu, 'Tile Window to Left of Screen', win?.allows_resize(), () => tile(false));

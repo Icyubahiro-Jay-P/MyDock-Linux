@@ -77,7 +77,7 @@ the top right, bold macOS-style dark menus, About This PC window, CPU temperatur
 | Planned | Reset to defaults button in settings | `settings.reset()` on every key |
 | Planned | Translations | gettext `po/` folder, `_()` on every label |
 | Planned | Screen reader names on dock items | `accessible_name` on `DockItem` |
-| Planned | GNOME 49 and 50 support | Test, then raise `shell-version`, `MAX_SHELL` and the .deb Depends |
+| Done | GNOME 49 and 50 support | Ported the maximize, grab, GLSL and restart APIs that changed; raised `shell-version`, `MAX_SHELL` and the .deb Depends |
 | Planned | README screenshot | `docs/screenshot.png`, dock and menu bar in dark mode |
 
 Out of scope: desktop icons (use Desktop Icons NG) and Quick Look (use GNOME Sushi with Nautilus).

@@ -113,7 +113,8 @@ export class Updater {
                 const last = out.trim().split('\n').pop() || `exit ${p.get_exit_status()}`;
                 console.log(`MY DOCK FINDER FOR LINUX: update failed:\n${out}`);
                 this._notify('MY DOCK FINDER FOR LINUX update failed', last);
-            } else if (Meta.is_wayland_compositor()) {
+            } else if (Meta.is_wayland_compositor?.() ?? true) {
+                // GNOME 50 has no X11 session (and no is_wayland_compositor / restart)
                 this._notify(`MY DOCK FINDER FOR LINUX updated to ${ver}`,
                     'Log out and back in to finish (Wayland cannot restart the shell). Open apps can save first; nothing closes until you confirm.',
                     [['Log out now', () => this._logout()]]);
