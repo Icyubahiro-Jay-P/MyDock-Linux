@@ -12,6 +12,7 @@ import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
+// px values are logical: multiplied by the St scale factor where used as raw actor geometry
 const MARGIN = 12;          // gap between strip and screen edge
 const MAX_STACK = 3;        // clones per group
 const ANIM_MS = 220;
@@ -142,6 +143,11 @@ export class StageManager {
             win.disconnect(this._unmanagedIds.get(win));
             this._unmanagedIds.delete(win);
             this._ours.delete(win);
+            this._stageWinSigs = this._stageWinSigs.filter(([w, id]) => {
+                if (w === win)
+                    win.disconnect(id);
+                return w !== win;
+            });
             this._queueSync();
         }));
     }
@@ -182,7 +188,8 @@ export class StageManager {
         const win = global.display.focus_window;
         if (!win || win.skip_taskbar || win.get_monitor() !== Main.layoutManager.primaryIndex)
             return;
-        const app = this._tracker.get_window_app(win);
+        // a dialog (e.g. a portal file chooser) belongs to its parent's group
+        const app = this._tracker.get_window_app(win.find_root_ancestor());
         if (!app || app === this._stage)
             return;
         this._arrange(app, false);
@@ -316,9 +323,10 @@ export class StageManager {
             [, w] = this._strip.get_preferred_width(-1);
             [, h] = this._strip.get_preferred_height(w);
         }
-        const y = mon.y + Math.max(MARGIN, Math.floor((mon.height - h) / 2));
-        this._stripBox.set_position(mon.x + MARGIN, y);
-        this._rect = {x: mon.x, y, width: w + 2 * MARGIN, height: h};
+        const m = MARGIN * St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        const y = mon.y + Math.max(m, Math.floor((mon.height - h) / 2));
+        this._stripBox.set_position(mon.x + m, y);
+        this._rect = {x: mon.x, y, width: w + 2 * m, height: h};
     }
 
     // notify::height fires during allocation; move the parent after layout, not inside it
@@ -333,7 +341,9 @@ export class StageManager {
     }
 
     _buildGroup(app, wins) {
-        const size = this._settings.get_int('stage-size');
+        const logical = this._settings.get_int('stage-size');
+        const sf = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        const size = logical * sf, inset = STACK_INSET * sf;
         const button = new St.Button({
             style_class: 'mydock-stage-group',
             reactive: true,
@@ -354,24 +364,24 @@ export class StageManager {
                 return;
             const depth = top.length - 1 - i;      // 0 = front
             const [aw, ah] = actor.get_size();
-            const cw = size - depth * 8;
+            const cw = size - depth * 8 * sf;
             const ch = aw > 0 ? Math.round(cw * ah / aw) : Math.round(cw * 0.66);
             const clone = new Clutter.Clone({
                 source: actor,
                 width: cw,
                 height: ch,
-                x: STACK_INSET + depth * 6,
-                y: STACK_INSET + depth * 5,
+                x: inset + depth * 6 * sf,
+                y: inset + depth * 5 * sf,
                 pivot_point: new Graphene.Point({x: 0.5, y: 0.5}),
                 rotation_angle_y: 14,
                 rotation_angle_z: depth * -3,
                 opacity: 255 - depth * 50,
             });
             stack.add_child(clone);
-            stackH = Math.max(stackH, ch + depth * 5);
+            stackH = Math.max(stackH, ch + depth * 5 * sf);
         });
         // room for the y-rotation perspective and the hover zoom so clones stay inside the group
-        stack.set_size(size + 12 + 2 * STACK_INSET, stackH + 2 * STACK_INSET);
+        stack.set_size(size + 12 * sf + 2 * inset, stackH + 2 * inset);
         box.add_child(stack);
 
         const row = new St.BoxLayout({style_class: 'mydock-stage-label-row', x_align: Clutter.ActorAlign.CENTER});
@@ -387,7 +397,7 @@ export class StageManager {
                 y_align: Clutter.ActorAlign.CENTER,
             });
             label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
-            label.style = `max-width: ${size - ICON_SIZE}px;`;
+            label.style = `max-width: ${logical - ICON_SIZE}px;`;   // CSS px: St scales it
             row.add_child(label);
             this._titles.set(app, label);
         }
