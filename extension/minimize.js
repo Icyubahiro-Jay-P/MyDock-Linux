@@ -20,7 +20,7 @@ import {genieVertex, suckVertex, targetSide} from './deform-math.js';
 
 const STRIP_PX = 3;     // one mesh strip per ~3px of window
 const MIN_STRIPS = 24;
-const MAX_STRIPS = 200;   // clone count cap; strips only exist while the animation runs
+const MAX_STRIPS = 96;    // clone count cap; strips only exist while the animation runs
 const VERTEX = {genie: genieVertex, suck: suckVertex};
 const STAGE_MS = 520;       // Stage Manager fly-out (fixed: it is not the user's minimize effect)
 const STAGE_MAX_AGE = 2e6;  // us a recorded thumbnail rect stays valid for
