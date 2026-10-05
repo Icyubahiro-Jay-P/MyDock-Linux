@@ -7,7 +7,9 @@ rm -rf dist
 mkdir -p dist
 glib-compile-schemas --strict --dry-run extension/schemas
 EXCL=(--exclude=gschemas.compiled --exclude='*.test.mjs')
-{ cat install-stub.sh; tar czf - -C extension "${EXCL[@]}" . | base64; } > dist/dock-install.sh
+# same sources, same bytes: fixed order, times and owners (GNU tar), and gzip -n drops the timestamp
+REPRO=(--sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner)
+{ cat install-stub.sh; tar cf - -C extension "${REPRO[@]}" "${EXCL[@]}" . | gzip -n | base64; } > dist/dock-install.sh
 chmod +x dist/dock-install.sh
 
 VERSION=$(python3 -c 'import json; print(json.load(open("extension/metadata.json"))["version-name"])')
