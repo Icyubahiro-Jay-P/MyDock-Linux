@@ -17,6 +17,8 @@ const BASE = GLib.getenv('MYDOCK_UPDATE_BASE') ?? 'https://github.com/Icyubahiro
 const FIRST_DELAY = Number(GLib.getenv('MYDOCK_UPDATE_DELAY') ?? 60); // s after login, keeps startup fast
 const RECHECK = 6 * 3600; // s between "is a check due?" wake-ups
 const DAY = 24 * 3600;
+// module level, not per Updater: a disable / enable while an install runs must not start another
+let installing = false;
 
 // Runs outside the shell as: bash -c SCRIPT mydock-update <base-url> <user|deb> <version>.
 // Inputs are positional args, never pasted into the script text.
@@ -33,7 +35,15 @@ d=$(mktemp -d); trap 'rm -rf "$d"' EXIT; cd "$d"
 dl "$base/$f" "$f" || { echo "Download failed: $base/$f"; exit 1; }
 dl "$base/SHA256SUMS" SHA256SUMS || { echo "Download failed: $base/SHA256SUMS"; exit 1; }
 grep -E "^[0-9a-f]{64} [ *](\\./)?$f\$" SHA256SUMS | sha256sum -c - || { echo "Checksum check failed, nothing was installed."; exit 1; }
-if [ "$mode" = deb ]; then pkexec apt-get install -y "$d/$f"; else bash "$f"; fi`;
+if [ "$mode" = deb ]; then
+    want=$(grep -m1 -E "^[0-9a-f]{64} [ *](\\./)?$f\$" SHA256SUMS | cut -c1-64)
+    # $d is user-writable: as root, copy the .deb into a root-owned dir and hash that copy before installing it
+    # shellcheck disable=SC2016 # expanded by the root shell
+    pkexec bash -c 'r=$(mktemp -d) && chmod 755 "$r" && cp -- "$1" "$r/$2" && echo "$3  $r/$2" | sha256sum -c - && apt-get install -y "$r/$2"; rc=$?; rm -rf "$r"; exit $rc' \\
+        mydock-update-root "$d/$f" "$f" "$want"
+else
+    bash "$f"
+fi`;
 
 export class Updater {
     constructor(ext) {
@@ -91,23 +101,22 @@ export class Updater {
     }
 
     _update(ver) {
-        if (this._busy)
+        if (installing)
             return;
-        this._busy = true;
         const mode = this._ext.path.startsWith('/usr/') ? 'deb' : 'user';
         this._notify('Updating MY DOCK FINDER FOR LINUX...', mode === 'deb' ? 'You will be asked for your password.' : '', [], true);
         const proc = Gio.Subprocess.new(['bash', '-c', SCRIPT, 'mydock-update', `${BASE}/v${ver}`, mode, ver],
             Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_MERGE);
+        installing = true;
+        proc.wait_async(null, () => (installing = false)); // not cancelled: tracks the real exit
         // Cancelling on destroy only stops waiting; a running install is left to finish.
         proc.communicate_utf8_async(null, this._cancel, (p, res) => {
             let out;
             try {
                 [, out] = p.communicate_utf8_finish(res);
             } catch (e) {
-                this._busy = false;
                 return; // cancelled: the extension went away
             }
-            this._busy = false;
             out = out ?? '';
             if (!p.get_successful()) {
                 const last = out.trim().split('\n').pop() || `exit ${p.get_exit_status()}`;
