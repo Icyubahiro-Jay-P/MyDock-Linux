@@ -19,6 +19,7 @@ import * as Util from 'resource:///org/gnome/shell/misc/util.js';
 import * as SystemActions from 'resource:///org/gnome/shell/misc/systemActions.js';
 import {AppMenu} from 'resource:///org/gnome/shell/ui/appMenu.js';
 import {showAboutPC, closeAboutPC, attachStatPopup} from './aboutpc.js';
+import {showForceQuit, closeForceQuit} from './forcequit.js';
 import {mergeOrder} from './panel-order.js';
 import {parseCpuStat, cpuUsage, parseMemInfo, parseNetDev, formatRate} from './sysinfo.js';
 
@@ -146,6 +147,7 @@ export class FinderBar {
         this._stat = {}; // stat key -> its value label
         this._popup = {}; // stat key -> its popup card (aboutpc.js)
         this._syncStats();
+        this._syncSpotlight();
         this._layout();
         this._syncBlur();
 
@@ -153,6 +155,7 @@ export class FinderBar {
         this._connect(this._settings, 'changed::logo-path', () => this._syncLogo());
         this._connect(this._settings, 'changed::time-format', () => this._tick(true));
         this._connect(this._settings, 'changed::finderbar-stats', () => this._syncStats());
+        this._connect(this._settings, 'changed::show-spotlight', () => this._syncSpotlight());
         for (const [key] of STATS)
             this._connect(this._settings, `changed::stats-${key}`, () => this._syncStat(key));
         // session mode changes (e.g. after unlock) rebuild the panel boxes and undo our layout
@@ -206,6 +209,7 @@ export class FinderBar {
         sep();
         const task = TASK_APPS.map(id => appSys.lookup_app(id)).find(a => a);
         menu.addAction('Task Manager', () => task ? task.activate() : Util.spawn(['gnome-system-monitor']));
+        menu.addAction('Force Quit...', () => showForceQuit());
         sep();
 
         // filled each time the logo menu opens (a PopupSubMenu with no items would not open)
@@ -555,6 +559,36 @@ export class FinderBar {
         }
     }
 
+    // ---- right: Spotlight (opens the overview with the search field focused) ----
+
+    _syncSpotlight() {
+        const on = this._settings.get_boolean('show-spotlight');
+        if (on && !this._spotlight) {
+            const btn = new PanelMenu.Button(0.0, 'Spotlight', true);
+            btn.add_style_class_name('mydock-spotlight-button');
+            btn.add_child(new St.Icon({icon_name: 'system-search-symbolic', style_class: 'system-status-icon'}));
+            const toggle = () => {
+                if (Main.overview.visible)
+                    Main.overview.hide();
+                else
+                    Main.overview.focusSearch();
+                return Clutter.EVENT_STOP;
+            };
+            btn.connect('button-press-event', toggle);
+            btn.connect('touch-event', (_a, ev) => ev.type() === Clutter.EventType.TOUCH_BEGIN
+                ? toggle() : Clutter.EVENT_PROPAGATE);
+            // just left of the clock
+            const right = Main.panel._rightBox;
+            const clock = Main.panel.statusArea.dateMenu?.container;
+            const index = clock?.get_parent() === right ? right.get_children().indexOf(clock) : -1;
+            Main.panel.addToStatusArea('mydock-spotlight', btn, index, 'right');
+            this._spotlight = btn;
+        } else if (!on && this._spotlight) {
+            this._spotlight.destroy();
+            this._spotlight = null;
+        }
+    }
+
     // ---- layout / blur ----
 
     _layout() {
@@ -799,6 +833,7 @@ export class FinderBar {
 
     destroy() {
         closeAboutPC();
+        closeForceQuit();
         this._endDrag(false);
         for (const [obj, id] of this._sigs)
             obj.disconnect(id);
@@ -837,6 +872,8 @@ export class FinderBar {
         this._menuBtns = [];
         this._appButton.destroy(); // also destroys its menu
         this._logoButton.destroy();
+        this._spotlight?.destroy();
+        this._spotlight = null;
 
         if (this._blur) {
             Main.panel.remove_effect(this._blur);

@@ -16,6 +16,7 @@ import {StatusMenus} from './statusmenus.js';
 import {MinimizeEffects} from './minimize.js';
 import {Updater} from './updater.js';
 import {WindowButtons} from './windowbuttons.js';
+import {MenuBarAutohide} from './menubarhide.js';
 
 // [property on ext, class, setting that toggles it (null = always on)]
 const FEATURES = [
@@ -26,6 +27,7 @@ const FEATURES = [
     ['stageManager', StageManager, 'stage-manager'],
     ['minimize', MinimizeEffects, null],
     ['windowButtons', WindowButtons, 'window-buttons-left'],
+    ['menuBarAutohide', MenuBarAutohide, 'finderbar-autohide'],
     ['updater', Updater, null], // check-updates only gates the daily check; the About page can always ask
 ];
 

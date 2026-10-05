@@ -54,12 +54,12 @@ the top right, bold macOS-style dark menus, About This PC window, CPU temperatur
 | --- | --- | --- |
 | Planned | Bold app name and real app menus (File, Edit, View, Window, Help) | Read the app's exported `org.gtk.Menus` or `com.canonical.dbusmenu` menu, fall back to the current AppMenu |
 | Done | Logo menu: Recently opened files submenu, Task Manager | Parse `~/.local/share/recently-used.xbel` |
-| Planned | Logo menu: Force Quit... | Dialog listing running apps, quit with `app.request_quit()`, kill if it does not respond |
+| Done | Logo menu: Force Quit... | `forcequit.js`: dialog of running apps, kills the selected app's windows (`Meta.Window.kill()`) |
 | Done | File, View and Window menus: New/Close Window, Quit, Full Screen, Minimize, Zoom, Tile left or right, Bring All to Front | New `PanelMenu.Button` after the app name |
-| Planned | Spotlight icon on the right | Opens the overview with the search entry focused |
+| Done | Spotlight icon on the right | Opens the overview with the search field focused (`show-spotlight`) |
 | Done | Control Center: one icon for quick settings, plus separate Wi-Fi, Bluetooth, Sound, Display, Battery, Account and tray menus (`statusmenus.js`) | Restyle the quick settings button, keep GNOME's menu |
-| Planned | Automatically hide and show the menu bar | Slide the panel away, reveal at the top edge, always in fullscreen |
-| Planned | Clock presets | Choice row with common formats, keep raw strftime as advanced |
+| Done | Automatically hide and show the menu bar | `menubarhide.js`: slides the panel away and drops its strut; the top edge, panel menus and the overview bring it back (`finderbar-autohide`) |
+| Done | Clock presets | Preset popup in Settings, Custom shows the raw strftime field (`clockpresets.js`) |
 
 ## Launchpad (`extension/launchpad.js`)
 

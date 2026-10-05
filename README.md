@@ -21,7 +21,7 @@ Then **log out and back in**. Nothing needs sudo. Want to read the script first?
 ## Features
 
 - **Dock**: magnification on hover, running-app dots (hollow when every window is minimized), bounce on launch and when an app needs attention, notification badges and progress bars, scroll on an icon to switch its windows, app name labels, trash, live calendar and clock icons, blur and opacity, autohide, a dock on every monitor.
-- **Finder bar**: restyles the GNOME top panel into a translucent macOS-style menu bar, with a custom clock format and an optional custom logo.
+- **Finder bar**: restyles the GNOME top panel into a translucent macOS-style menu bar, with clock format presets, an optional custom logo, a Spotlight search icon, Force Quit in the logo menu, and an option to hide the bar until you push the pointer against the top edge.
 - **Launchpad**: full-screen app grid, opened from the dock or with **Ctrl+Super+A**.
 - **Stage Manager**: a strip of recent window groups on the side of the screen. Off by default.
 - **Minimize effects**: genie, suck, scale or none, with adjustable duration.
@@ -126,7 +126,9 @@ Every setting applies live. Key settings (schema `org.gnome.shell.extensions.myd
 | Dock | `scroll-cycles-windows` | `true` | Scroll on an app icon to switch between its windows |
 | Finder bar | `finderbar-enabled` | `true` | macOS-style top bar |
 | Finder bar | `finderbar-status-menus` | `true` | Wi-Fi, Bluetooth, sound, display, battery, account menus and a Control Center in the Finder bar |
-| Finder bar | `time-format` | `'%a %-d %b  %-I:%M %p'` | Clock format (GLib strftime) |
+| Finder bar | `time-format` | `'%a %-d %b  %-I:%M %p'` | Clock format (GLib strftime); Settings offers presets |
+| Finder bar | `finderbar-autohide` | `false` | Hide the menu bar until the pointer touches the top edge (works even with the Finder bar off) |
+| Finder bar | `show-spotlight` | `true` | Search icon that opens the overview with the search field focused |
 | Finder bar | `logo-path` | `''` | Custom top-left logo image (empty = distributor logo) |
 | Launchpad | `launchpad-hotkey` | `['<Control><Super>a']` | Launchpad shortcut |
 | Stage Manager | `stage-manager` | `false` | Turn Stage Manager on |
@@ -191,8 +193,7 @@ The version comes from `"version-name"` in `extension/metadata.json`.
 Run the tests:
 
 ```bash
-node extension/deform-math.test.mjs
-node extension/version.test.mjs
+for t in extension/*.test.mjs; do node "$t"; done
 ```
 
 CI (`.github/workflows/build.yml`) runs the tests, shellcheck and the build on every push and pull request. Pushing a tag like `v1.0.0` creates a GitHub Release with both files attached.
