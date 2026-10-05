@@ -40,7 +40,7 @@ GNOME 49 and 50 (Ubuntu 25.10 / 26.04) are **not tested**. See [Compatibility](#
 
 ### .deb package (Ubuntu, Debian)
 
-Download `dock_<version>_all.deb` (for example `dock_1.1.2_all.deb`) from the [Releases page](https://github.com/Icyubahiro-Jay-P/MyDock-Linux/releases), then:
+Download `dock_<version>_all.deb` (for example `dock_1.1.4_all.deb`) from the [Releases page](https://github.com/Icyubahiro-Jay-P/MyDock-Linux/releases), then:
 
 ```bash
 sudo apt install ./dock_<version>_all.deb
