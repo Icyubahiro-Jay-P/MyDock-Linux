@@ -196,7 +196,7 @@ Run the tests:
 for t in extension/*.test.mjs; do node "$t"; done
 ```
 
-CI (`.github/workflows/build.yml`) runs the tests, shellcheck and the build on every push and pull request. Pushing a tag like `v1.0.0` creates a GitHub Release with both files attached.
+CI (`.github/workflows/build.yml`) runs on every push and pull request: it starts a headless GNOME Shell 46, 48, 49 and 50 with the extension and fails on any error it logs (`ci/smoke.sh`), then runs the tests, shellcheck and the build. Releases are published from the Actions tab with **Run workflow** (see [CONTRIBUTING.md](CONTRIBUTING.md#releasing-maintainers)), or by pushing a tag like `v1.2.0`.
 
 ## Roadmap
 

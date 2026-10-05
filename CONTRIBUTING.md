@@ -28,12 +28,18 @@ Re-run the last two commands after each change, then test in a nested shell (bel
 for t in extension/*.test.mjs; do node "$t"; done
 ```
 
-Each `*.test.mjs` covers a module with no GNOME imports (`deform-math.js`, `version.js`, `panel-order.js`, `clockpresets.js` and the `sysinfo.js` parsers), so it runs under plain Node. Add a case when you change one.
+Each `*.test.mjs` covers a module with no GNOME imports (`deform-math.js`, `version.js`, `panel-order.js`, `clockpresets.js` and the `sysinfo.js` parsers), so it runs under plain Node. Add a case when you change one. `shell-range.test.mjs` checks that the supported GNOME versions agree everywhere they are written (`metadata.json`, `install-stub.sh`, `build.sh`).
+
+The smoke test starts a headless GNOME Shell with your working copy, flips every on/off setting, disables and re-enables the extension, and fails on any error the shell logs. It uses its own D-Bus session and home folder, so it does not touch your desktop. CI runs it on GNOME 46, 48, 49 and 50:
+
+```bash
+bash ci/smoke.sh
+```
 
 Lint the shell scripts the same way CI does:
 
 ```bash
-shellcheck build.sh install.sh install-stub.sh
+shellcheck build.sh install.sh install-stub.sh ci/smoke.sh
 ```
 
 ## Testing in a nested shell
@@ -118,14 +124,15 @@ New settings go in `extension/schemas/org.gnome.shell.extensions.mydock.gschema.
 
 ## Releasing (maintainers)
 
-1. Bump `"version-name"` (for example `"1.1.0"`) and `"version"` (integer, +1) in `extension/metadata.json`. When adding support for a new GNOME version, also add it to `"shell-version"` and raise the upper bound in `install-stub.sh` (`MAX_SHELL`) and the `.deb` Depends in `build.sh`.
-2. Merge it to `main`, then either:
-   - **From any browser or the GitHub app:** Actions > build > Run workflow on `main`. It creates the `v<version-name>` tag and release itself.
-   - **From a terminal:** tag and push the tag:
+**One step, from any browser or the GitHub app:** Actions > build > **Run workflow** on `main`, type the new version (for example `1.2.1`) and run it. CI checks the GNOME smoke tests, sets `"version-name"` and bumps `"version"` in `extension/metadata.json` (`ci/bump.py`), commits that to `main`, then builds and publishes the `v1.2.1` release. Leave the version empty to publish the version already in `metadata.json`.
 
-     ```bash
-     git tag v1.1.0
-     git push origin v1.1.0
-     ```
+**By hand:** set the version with `python3 ci/bump.py 1.2.1`, commit and merge to `main`, then tag and push the tag:
 
-3. CI builds and publishes a GitHub Release with `dock-install.sh` and `dock_<version>_all.deb` and `SHA256SUMS` attached. The one-liner picks up the new release automatically.
+```bash
+git tag v1.2.1
+git push origin v1.2.1
+```
+
+When adding support for a new GNOME version, add it to `"shell-version"` and raise `MAX_SHELL` in `install-stub.sh` and the `.deb` Depends in `build.sh` (`shell-range.test.mjs` fails until they agree), and add the matching image to the `smoke` matrix in the workflow.
+
+Either way, CI builds and publishes a GitHub Release with `dock-install.sh` and `dock_<version>_all.deb` and `SHA256SUMS` attached. The one-liner picks up the new release automatically.
