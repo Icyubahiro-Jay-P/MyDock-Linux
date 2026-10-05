@@ -26,11 +26,12 @@ Re-run the last two commands after each change, then test in a nested shell (bel
 
 ```bash
 for t in extension/*.test.mjs; do node "$t"; done
+python3 ci/bump_test.py
 ```
 
 Each `*.test.mjs` covers a module with no GNOME imports (`deform-math.js`, `version.js`, `panel-order.js`, `clockpresets.js` and the `sysinfo.js` parsers), so it runs under plain Node. Add a case when you change one. `shell-range.test.mjs` checks that the supported GNOME versions agree everywhere they are written (`metadata.json`, `install-stub.sh`, `build.sh`).
 
-The smoke test starts a headless GNOME Shell with your working copy, flips every on/off setting, disables and re-enables the extension, and fails on any error the shell logs. It uses its own D-Bus session and home folder, so it does not touch your desktop. CI runs it on GNOME 46, 48, 49 and 50:
+The smoke test starts a headless GNOME Shell with your working copy, flips every on/off and enum setting, imports prefs.js, disables and re-enables the extension, and fails on any error the shell logs. It uses its own D-Bus session and home folder, so it does not touch your desktop. CI runs it on GNOME 46, 47, 48, 49 and 50:
 
 ```bash
 bash ci/smoke.sh
@@ -40,6 +41,7 @@ Lint the shell scripts the same way CI does:
 
 ```bash
 shellcheck build.sh install.sh install-stub.sh ci/smoke.sh
+sed -n '/^const SCRIPT = `/,/`;$/{s/^const SCRIPT = `//;s/`;$//;s/\\\\/\\/g;p}' extension/updater.js | shellcheck -s bash -
 ```
 
 ## Testing in a nested shell
@@ -72,21 +74,33 @@ The nested shell loads the installed copy in `~/.local/share/gnome-shell/extensi
 extension/
   extension.js              entry point, creates and destroys features
   dock.js                   the dock
-  finderbar.js              top panel restyle
+  calendar.js               month calendar above the dock's calendar tile
+  calendar-math.js          pure month-grid math for calendar.js
+  finderbar.js              top panel restyle (the Finder bar)
+  statusmenus.js            Wi-Fi, Bluetooth, Sound, Battery and other status menus, Control Center
+  format.js                 pure helpers for statusmenus.js
+  aboutpc.js                About This PC dialog and the stat popups
+  sysinfo.js                pure /proc parsers for aboutpc.js
+  forcequit.js              Force Quit Applications dialog
+  menubarhide.js            hide and show the menu bar automatically
+  panel-order.js            pure helper for the Finder bar's Ctrl + drag order
+  clockpresets.js           clock format presets for the settings window
   launchpad.js              app grid and hotkey
   stagemanager.js           Stage Manager strip
   minimize.js               minimize animations
+  deform-math.js            pure math for genie/suck
   windowbuttons.js          window buttons on the left, traffic light colors
-  menubarhide.js            hide and show the menu bar automatically
-  forcequit.js              Force Quit Applications dialog
-  clockpresets.js           clock format presets for the settings window
-  deform-math.js            pure math for genie/suck (tested by deform-math.test.mjs)
+  updater.js                daily update check and one-click update
+  version.js                version compare for the updater and prefs
   prefs.js                  settings window, rows generated from tables
+  *.test.mjs                node tests for the pure modules
   schemas/                  GSettings schema
   themes/default/stylesheet.css   default theme
 build.sh                    builds dist/dock-install.sh and the .deb
 install-stub.sh             installer script that the payload is appended to
 install.sh                  one-liner that fetches the latest release installer
+ci/smoke.sh                 headless GNOME Shell smoke test
+ci/bump.py                  sets the release version (tested by ci/bump_test.py)
 ```
 
 ### Feature classes
@@ -136,3 +150,13 @@ git push origin v1.2.1
 When adding support for a new GNOME version, add it to `"shell-version"` and raise `MAX_SHELL` in `install-stub.sh` and the `.deb` Depends in `build.sh` (`shell-range.test.mjs` fails until they agree), and add the matching image to the `smoke` matrix in the workflow.
 
 Either way, CI builds and publishes a GitHub Release with `dock-install.sh` and `dock_<version>_all.deb` and `SHA256SUMS` attached. The one-liner picks up the new release automatically.
+
+A re-run never replaces a published release: if the release for that version is already out, the workflow fails, so bump the version instead. A release drafted in the GitHub UI is still filled in. Tags must point at a commit on `main`.
+
+### Signing releases (not enabled yet)
+
+`SHA256SUMS` catches a corrupted download, not a tampered release. The workflow has a commented-out minisign step for when a key exists:
+
+1. `minisign -G -W -p minisign.pub -s minisign.key` (`-W`: no password, CI cannot type one). Keep `minisign.key` offline.
+2. Add the contents of `minisign.key` as the `MINISIGN_KEY` repository secret, uncomment the "Sign SHA256SUMS" step and add `dist/SHA256SUMS.minisig` to the release files.
+3. Pin the public key in `install.sh` and `extension/updater.js` and verify `SHA256SUMS.minisig` before trusting `SHA256SUMS`. Only ship this after one signed release is out, or older installers have nothing to check.
