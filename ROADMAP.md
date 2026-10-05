@@ -29,7 +29,7 @@ clock, drag to reorder, autohide, a dock on every monitor, right-click app menu.
 
 | Status | Feature | How |
 | --- | --- | --- |
-| Planned | Separator between pinned apps and other running apps | Thin `St.Widget` between the two groups in `setApps()` |
+| Planned | Automatic separator between pinned apps and other running apps (user separators you add from the menu are done, `dock-separators`) | Thin `St.Widget` between the two groups in `setApps()` |
 | Planned | "Show suggested and recent apps in Dock" | Keep the last 3 closed unpinned apps in a key, show them after the separator |
 | Planned | Bounce when an app needs attention | Watch `demands-attention` / `urgent` on windows, reuse `_bounce()` |
 | Done | Progress bars (`com.canonical.Unity.LauncherEntry`), badges still planned | Listen to the `com.canonical.Unity.LauncherEntry` DBus signal (used by Chrome, Telegram, Thunderbird, Nautilus) |
@@ -65,18 +65,18 @@ the top right, bold macOS-style dark menus, About This PC window, CPU temperatur
 
 | Status | Feature | How |
 | --- | --- | --- |
-| Planned | Typing starts a search | Keep the search entry hidden but forward key presses to it |
-| Planned | Page dots and no scroll bar | Style the paged app grid |
-| Planned | Click on empty space closes Launchpad | Button press handler on the background |
+| Done | Typing starts a search | Keep the search entry hidden but forward key presses to it |
+| Done | Page dots and no scroll bar | Style the paged app grid |
+| Done | Click on empty space closes Launchpad | Button press handler on the background |
 | Planned | F4 or pinch gesture | Optional extra keybinding and a touchpad gesture |
 
 ## Polish
 
 | Status | Feature | How |
 | --- | --- | --- |
-| Planned | Reset to defaults button in settings | `settings.reset()` on every key |
+| Done | Reset to defaults button in settings | `settings.reset()` on every key |
 | Planned | Translations | gettext `po/` folder, `_()` on every label |
-| Planned | Screen reader names on dock items | `accessible_name` on `DockItem` |
+| Done | Screen reader names on dock items | `accessible_name` on `DockItem` |
 | Done | GNOME 49 and 50 support | Ported the maximize, grab, GLSL and restart APIs that changed; raised `shell-version`, `MAX_SHELL` and the .deb Depends |
 | Planned | README screenshot | `docs/screenshot.png`, dock and menu bar in dark mode |
 

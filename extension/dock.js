@@ -189,6 +189,7 @@ class DockItem extends St.Button {
         this._bar = bar;
         this.app = app;
         this.labelText = label; // not `label`: that is an St.Button property
+        this.accessible_name = app?.get_name() ?? label; // what screen readers announce
         this._onClick = onClick;
         this._buildMenu = buildMenu;
         this.pinned = false;

@@ -13,6 +13,9 @@ import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/ex
 
 import {compareVersions} from './version.js';
 
+// Settings the user never sees; Reset leaves them alone.
+const INTERNAL_KEYS = new Set(['saved-button-layout', 'last-update-check', 'skipped-version']);
+
 // [page title, icon, badge color, groups, style?]
 // A group is [title, [key, ...], footnote?] or the name of a custom builder in CUSTOM_GROUPS.
 // style 'cards' draws each group as a rounded card; other pages are a plain list like the
@@ -432,6 +435,33 @@ export default class MyDockPrefs extends ExtensionPreferences {
         momo.add_suffix(copy);
         support.add(momo);
 
+        // Reset: every setting back to its default, after a confirmation. Bookkeeping keys stay,
+        // so the saved window button layout and the update state are not lost.
+        const reset = new Adw.PreferencesGroup({title: 'Reset'});
+        const resetRow = new Adw.ActionRow({title: 'Reset all settings', use_markup: false,
+            subtitle: 'Puts every setting back to its default. The apps pinned in the Dock stay.'});
+        const resetBtn = new Gtk.Button({label: 'Reset...', valign: center, css_classes: ['destructive-action', 'mydock-button']});
+        resetBtn.connect('clicked', () => {
+            const dialog = new Adw.AlertDialog({heading: 'Reset all settings?',
+                body: `Every ${name} setting goes back to its default. This cannot be undone.`});
+            dialog.add_response('cancel', 'Cancel');
+            dialog.add_response('reset', 'Reset');
+            dialog.set_response_appearance('reset', Adw.ResponseAppearance.DESTRUCTIVE);
+            dialog.default_response = 'cancel';
+            dialog.close_response = 'cancel';
+            dialog.connect('response', (_d, response) => {
+                if (response !== 'reset')
+                    return;
+                for (const key of schema.list_keys()) {
+                    if (!INTERNAL_KEYS.has(key))
+                        settings.reset(key);
+                }
+            });
+            dialog.present(resetBtn);
+        });
+        resetRow.add_suffix(resetBtn);
+        reset.add(resetRow);
+
         window.connect('close-request', () => {
             cancellable?.cancel();
             if (copyTimer)
@@ -447,6 +477,7 @@ export default class MyDockPrefs extends ExtensionPreferences {
                 {row: auto, text: `${TITLES['check-updates']} check-updates`.toLowerCase()},
             ]),
             this._section(page, support, [{row: momo, text: 'support donate mtn mobile money momo copy number'}]),
+            this._section(page, reset, [{row: resetRow, text: 'reset all settings defaults restore'}]),
         ];
         if (md.url) {
             const btn = new Gtk.Button({label: 'View on GitHub', halign: center, css_classes: ['pill', 'suggested-action', 'mydock-github']});
