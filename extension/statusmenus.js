@@ -19,16 +19,41 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as Util from 'resource:///org/gnome/shell/misc/util.js';
 import * as SystemActions from 'resource:///org/gnome/shell/misc/systemActions.js';
 import * as Volume from 'resource:///org/gnome/shell/ui/status/volume.js';
-import {loadInterfaceXML} from 'resource:///org/gnome/shell/misc/fileUtils.js';
 import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
 import {BarLevel} from 'resource:///org/gnome/shell/ui/barLevel.js';
 import {MprisPlayer} from 'resource:///org/gnome/shell/ui/mpris.js';
 import {Avatar} from 'resource:///org/gnome/shell/ui/userWidget.js';
 
-const BrightnessProxy = Gio.DBusProxy.makeProxyWrapper(loadInterfaceXML('org.gnome.SettingsDaemon.Power.Screen'));
-const UPowerProxy = Gio.DBusProxy.makeProxyWrapper(loadInterfaceXML('org.freedesktop.UPower.Device'));
-const ProfilesProxy = Gio.DBusProxy.makeProxyWrapper(loadInterfaceXML('net.hadess.PowerProfiles'));
-const RfkillProxy = Gio.DBusProxy.makeProxyWrapper(loadInterfaceXML('org.gnome.SettingsDaemon.Rfkill'));
+// The parts of each D-Bus interface we use. Kept here rather than loaded from GNOME Shell's own
+// copies, which are private and get renamed or dropped between releases (power profiles in 47,
+// screen brightness in 49): a missing one stopped the whole extension from loading.
+const BrightnessProxy = Gio.DBusProxy.makeProxyWrapper(`<node>
+  <interface name="org.gnome.SettingsDaemon.Power.Screen">
+    <property name="Brightness" type="i" access="readwrite"/>
+  </interface>
+</node>`);
+const UPowerProxy = Gio.DBusProxy.makeProxyWrapper(`<node>
+  <interface name="org.freedesktop.UPower.Device">
+    <property name="State" type="u" access="read"/>
+    <property name="Percentage" type="d" access="read"/>
+    <property name="TimeToEmpty" type="x" access="read"/>
+    <property name="TimeToFull" type="x" access="read"/>
+    <property name="IsPresent" type="b" access="read"/>
+    <property name="IconName" type="s" access="read"/>
+  </interface>
+</node>`);
+// power-profiles-daemon 0.20 and newer (every distro with GNOME 46+)
+const ProfilesProxy = Gio.DBusProxy.makeProxyWrapper(`<node>
+  <interface name="org.freedesktop.UPower.PowerProfiles">
+    <property name="ActiveProfile" type="s" access="readwrite"/>
+    <property name="Profiles" type="aa{sv}" access="read"/>
+  </interface>
+</node>`);
+const RfkillProxy = Gio.DBusProxy.makeProxyWrapper(`<node>
+  <interface name="org.gnome.SettingsDaemon.Rfkill">
+    <property name="BluetoothAirplaneMode" type="b" access="readwrite"/>
+  </interface>
+</node>`);
 
 const MPRIS_PREFIX = 'org.mpris.MediaPlayer2.';
 const MPRIS_PATH = '/org/mpris/MediaPlayer2';
@@ -530,13 +555,24 @@ class AccountItem extends StatusItem {
 class DisplayItem extends StatusItem {
     constructor() {
         super('mydock-display', 'Display', 'video-display-symbolic');
-        // made up front so the Control Center finds it ready
-        this._proxy = new BrightnessProxy(Gio.DBus.session, 'org.gnome.SettingsDaemon.Power',
-            '/org/gnome/SettingsDaemon/Power', (_p, error) => !error && this._queueRefresh());
+        // GNOME 49+ drives the backlight itself (Main.brightnessManager); older versions go through
+        // gnome-settings-daemon. Made up front so the Control Center finds it ready.
+        if (!Main.brightnessManager) {
+            this._proxy = new BrightnessProxy(Gio.DBus.session, 'org.gnome.SettingsDaemon.Power',
+                '/org/gnome/SettingsDaemon/Power', (_p, error) => !error && this._queueRefresh());
+        }
     }
 
     // brightness slider that follows the backlight until `drops` run; null without a backlight
     brightnessSlider(drops) {
+        if (Main.brightnessManager) {
+            const scale = Main.brightnessManager.globalScale; // null: no adjustable display
+            if (!scale)
+                return null;
+            const s = valueSlider(scale.value, v => (scale.value = v));
+            this._connect(scale, 'notify::value', () => s.set(scale.value), drops);
+            return s;
+        }
         const valid = b => Number.isInteger(b) && b >= 0; // -1 / missing: no backlight
         const b = this._proxy.Brightness;
         if (!valid(b))
@@ -622,8 +658,8 @@ class BatteryItem extends StatusItem {
             text += `\n${Math.floor(secs / 3600)} h ${Math.floor(secs / 60) % 60} min remaining`;
         menu.addMenuItem(heading(text));
 
-        this._profiles ??= new ProfilesProxy(Gio.DBus.system, 'net.hadess.PowerProfiles',
-            '/net/hadess/PowerProfiles', (_p, error) => {
+        this._profiles ??= new ProfilesProxy(Gio.DBus.system, 'org.freedesktop.UPower.PowerProfiles',
+            '/org/freedesktop/UPower/PowerProfiles', (_p, error) => {
                 if (error || this._destroyed)
                     return;
                 this._connect(this._profiles, 'g-properties-changed', () => this._queueRefresh());
@@ -934,6 +970,8 @@ class TrayItem extends StatusItem {
         this.btn.add_style_class_name('mydock-tray-button');
         this.btn.menu.actor.add_style_class_name('mydock-tray-menu');
         this._hidden = new Map(); // container -> its visibility before we hid it
+        // at shell shutdown the panel is torn down under us (no disable()): stop touching it
+        this.btn.connect('destroy', () => (this._btnGone = true));
         const p = Main.panel;
         for (const box of [p._leftBox, p._centerBox, p._rightBox]) {
             for (const sig of ['child-added', 'child-removed'])
@@ -958,6 +996,8 @@ class TrayItem extends StatusItem {
     }
 
     _sync() {
+        if (this._btnGone)
+            return;
         const current = new Set(this._indicators().map(ind => ind.container));
         for (const c of [...this._hidden.keys()]) {
             if (!current.has(c))

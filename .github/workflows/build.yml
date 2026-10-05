@@ -5,24 +5,72 @@ on:
     branches: [main]
     tags: ['v*']
   pull_request:
-  # "Run workflow" on main publishes v<version-name> from metadata.json (no tag push needed)
+  # "Run workflow" on main publishes a release (no tag push needed). With a version, it first sets
+  # metadata.json to that version and commits it to main; empty publishes the current version.
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'New version, for example 1.2.1 (leave empty to publish the version already in metadata.json)'
+        required: false
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+  # never cancel a release; a newer push only replaces an older check of the same branch
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
   contents: write
 
 jobs:
+  # Starts a headless GNOME Shell with the extension, flips every setting, disables and re-enables
+  # it, and fails on any error the shell logs (ci/smoke.sh).
+  smoke:
+    name: GNOME ${{ matrix.gnome }}
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {gnome: '46', image: 'ubuntu:24.04'}
+          - {gnome: '48', image: 'registry.fedoraproject.org/fedora:42'}
+          - {gnome: '49', image: 'registry.fedoraproject.org/fedora:43'}
+          - {gnome: '50', image: 'registry.fedoraproject.org/fedora:44'}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GNOME Shell
+        run: |
+          if command -v dnf >/dev/null; then
+            dnf install -y --setopt=install_weak_deps=False \
+              gnome-shell dbus-daemon dbus-tools dconf gvfs glib2 python3 tar
+          else
+            apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+              gnome-shell dbus-daemon dconf-service libglib2.0-bin gvfs gvfs-daemons python3
+          fi
+          gnome-shell --version | grep -q "Shell ${{ matrix.gnome }}\." || { gnome-shell --version; echo "expected GNOME ${{ matrix.gnome }}"; exit 1; }
+      - run: bash ci/smoke.sh
+
   build:
+    needs: smoke
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends shellcheck libglib2.0-bin
+      - name: Set the release version
+        if: github.event_name == 'workflow_dispatch' && inputs.version != ''
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          [[ "$GITHUB_REF" == refs/heads/main ]] || { echo "Publish releases from main only"; exit 1; }
+          python3 ci/bump.py "$VERSION"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -am "Release v$(python3 -c 'import json; print(json.load(open("extension/metadata.json"))["version-name"])')"
+          git push origin HEAD:main
       - run: for t in extension/*.test.mjs; do node "$t"; done
-      - run: shellcheck install.sh install-stub.sh build.sh
+      - run: shellcheck install.sh install-stub.sh build.sh ci/smoke.sh
       - run: bash build.sh && (cd dist && sha256sum dock-install.sh ./*.deb > SHA256SUMS)
       - uses: actions/upload-artifact@v4
         with:
@@ -46,6 +94,6 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "${files[@]}" --clobber
           else
-            # creates the tag on this commit when it does not exist yet (manual run)
-            gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --generate-notes
+            # creates the tag on this commit (the version commit, if one was just made)
+            gh release create "$tag" "${files[@]}" --target "$(git rev-parse HEAD)" --generate-notes
           fi
