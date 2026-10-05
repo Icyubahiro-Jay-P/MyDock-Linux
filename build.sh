@@ -3,6 +3,7 @@
 # and dist/dock_VERSION_all.deb (system-wide extension + dock).
 set -euo pipefail
 cd "$(dirname "$0")"
+rm -rf dist
 mkdir -p dist
 glib-compile-schemas --strict --dry-run extension/schemas
 EXCL=(--exclude=gschemas.compiled --exclude='*.test.mjs')
@@ -63,9 +64,20 @@ Description: macOS-style dock for GNOME Shell
  MY DOCK FINDER FOR LINUX adds a macOS-style dock, Finder bar, Launchpad, Stage Manager and
  genie minimize to GNOME Shell. Run dock once per user to enable it.
 CTL
+# apt cannot reach per-user settings. Removal is already underway when prerm runs, so point users at
+# the one-liner, which does the same as dock --uninstall without the package.
+cat > "$root/DEBIAN/prerm" <<'SH'
+#!/bin/sh
+set -e
+if [ "$1" = remove ]; then
+    echo "dock: per-user changes stay for each user who ran dock (window buttons, gtk.css, other docks turned off)."
+    echo "dock: next time, run dock --uninstall as each user first. To undo them now, run as each user (not root):"
+    echo "  curl -fsSL https://raw.githubusercontent.com/Icyubahiro-Jay-P/MyDock-Linux/main/install.sh | bash -s -- --uninstall"
+fi
+SH
 find "$root" -type d -exec chmod 0755 {} +
 find "$root" -type f -exec chmod 0644 {} +
-chmod 0755 "$root/usr/bin/dock"
+chmod 0755 "$root/usr/bin/dock" "$root/DEBIAN/prerm"
 dpkg-deb --build --root-owner-group "$root" "$DEB" >/dev/null
 
 echo "Built dist/dock-install.sh ($(du -h dist/dock-install.sh | cut -f1))"
