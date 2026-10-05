@@ -19,6 +19,7 @@ const PER_PAGE = COLS * ROWS;
 const OPEN_MS = 260;
 const PAGE_MS = 320;
 const SWIPE_PX = 60;        // horizontal drag that flips a page
+// logical px: multiplied by the St scale factor where used as raw actor geometry
 const SEARCH_H = 72;        // band for the search field under the panel
 const DOTS_H = 40;          // band for the page dots
 const SEARCH_W = 420;
@@ -68,6 +69,8 @@ export class Launchpad {
         if (!mon)
             return;
         this._mon = mon;
+        const sf = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        const searchW = SEARCH_W * sf, searchH = SEARCH_H * sf;
 
         this._actor = new St.Widget({
             style_class: 'mydock-launchpad',
@@ -95,23 +98,23 @@ export class Launchpad {
             style_class: 'mydock-launchpad-search',
             hint_text: 'Search',
             can_focus: true,
-            width: SEARCH_W,
+            width: searchW,
             primary_icon: new St.Icon({icon_name: 'edit-find-symbolic', style_class: 'mydock-launchpad-search-icon'}),
         });
         this._content.add_child(this._search);
         this._search.clutter_text.connect('text-changed', () => this._filter());
         this._search.clutter_text.connect('activate', () => this._visible[0]?.launch());
         this._search.clutter_text.connect('key-press-event', (_a, ev) => this._onKey(ev));
-        const [, sh] = this._search.get_preferred_height(SEARCH_W);
-        this._search.set_position(Math.round((mon.width - SEARCH_W) / 2), Math.round(panelH + (SEARCH_H - sh) / 2));
+        const [, sh] = this._search.get_preferred_height(searchW);
+        this._search.set_position(Math.round((mon.width - searchW) / 2), Math.round(panelH + (searchH - sh) / 2));
 
         // pages sit side by side in a strip that slides inside a clipped viewport
-        const top = panelH + SEARCH_H;
+        const top = panelH + searchH;
         this._grid = {
             x: Math.round(mon.width * 0.06),
             y: top,
             width: Math.round(mon.width * 0.88),
-            height: Math.max(ROWS * 60, mon.height - top - DOTS_H - dockH - 8),
+            height: Math.max(ROWS * 60 * sf, mon.height - top - (DOTS_H + 8) * sf - dockH),
         };
         const g = this._grid;
         this._viewport = new St.Widget({clip_to_allocation: true, reactive: true, x: g.x, y: g.y, width: g.width, height: g.height});
@@ -121,10 +124,10 @@ export class Launchpad {
 
         this._dots = new St.BoxLayout({style_class: 'mydock-launchpad-dots'});
         this._content.add_child(this._dots);
-        this._dotsY = g.y + g.height + Math.round((DOTS_H - 8) / 2);
+        this._dotsY = g.y + g.height + Math.round((DOTS_H - 8) * sf / 2);
 
-        // icon fills ~60% of the shorter cell side, the label goes under it
-        this._iconSize = Math.max(48, Math.min(128, Math.round(Math.min(g.width / COLS, g.height / ROWS) * 0.6)));
+        // icon fills ~60% of the shorter cell side, the label goes under it; icon_size is logical
+        this._iconSize = Math.max(48, Math.min(128, Math.round(Math.min(g.width / COLS, g.height / ROWS) * 0.6 / sf)));
 
         this._apps = this._appList();
         this._tiles = new Map(this._apps.map(app => [app, this._buildTile(app)]));
@@ -195,7 +198,7 @@ export class Launchpad {
 
     _buildTile(app) {
         const tile = new St.Button({style_class: 'mydock-launchpad-tile', can_focus: true, reactive: true});
-        const box = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
+        const box = new St.BoxLayout({vertical: true, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
         const gicon = this._ext.iconOverride?.(app.get_id());
         const icon = gicon
             ? new St.Icon({gicon, icon_size: this._iconSize})
