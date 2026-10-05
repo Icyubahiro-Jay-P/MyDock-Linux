@@ -9,7 +9,6 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const SLIDE_MS = 200;
-const POLL_MS = 150;    // one cheap pointer check while the bar is shown
 const HIDE_AFTER = 450; // ms the pointer has to stay away before the bar hides again
 
 export class MenuBarAutohide {
@@ -17,9 +16,11 @@ export class MenuBarAutohide {
         this._box = Main.layoutManager.panelBox;
         this._track(false);
         this._shown = true;
-        this._away = 0;
-        this._pollId = 0;
-        // nothing polls while hidden: a 1px strip on the top edge, the overview and a panel menu
+        this._hideId = 0;
+        // the panel's hover arms a one-shot hide timer when the pointer leaves it
+        this._hoverWas = Main.panel.track_hover;
+        Main.panel.track_hover = true;
+        // nothing runs while hidden: a 1px strip on the top edge, the overview and a panel menu
         // taking key focus (opened from the keyboard) bring the bar back
         this._edge = new St.Widget({reactive: true, visible: false});
         Main.layoutManager.addChrome(this._edge, {trackFullscreen: true});
@@ -31,21 +32,41 @@ export class MenuBarAutohide {
         this._sigs = [
             [Main.overview, Main.overview.connect('showing', wake)],
             [global.stage, global.stage.connect('notify::key-focus', wake)],
+            [Main.panel, Main.panel.connect('notify::hover', () => {
+                if (Main.panel.hover)
+                    this._stopHide();
+                else if (this._shown)
+                    this._startHide();
+            })],
+            // the panel box moves / resizes with the primary monitor: redo the strip and offset
+            [Main.layoutManager, Main.layoutManager.connect('monitors-changed', () => this._slide(this._shown))],
         ];
-        this._startPoll();
+        this._startHide();
     }
 
-    _startPoll() {
-        this._pollId ||= GLib.timeout_add(GLib.PRIORITY_DEFAULT, POLL_MS, () => {
-            this._poll();
-            return GLib.SOURCE_CONTINUE;
+    // hides once HIDE_AFTER passes with the pointer off the bar; while the overview or a panel
+    // menu is open, or the pointer is still in the top strip (the bar slid in under a resting
+    // pointer and no crossing event came yet), it checks again every HIDE_AFTER
+    _startHide() {
+        this._hideId ||= GLib.timeout_add(GLib.PRIORITY_DEFAULT, HIDE_AFTER, () => {
+            if (this._near() || Main.overview.visible || Main.panel.menuManager.activeMenu)
+                return GLib.SOURCE_CONTINUE;
+            this._hideId = 0;
+            this._slide(false);
+            return GLib.SOURCE_REMOVE;
         });
     }
 
-    _stopPoll() {
-        if (this._pollId)
-            GLib.source_remove(this._pollId);
-        this._pollId = 0;
+    _stopHide() {
+        if (this._hideId)
+            GLib.source_remove(this._hideId);
+        this._hideId = 0;
+    }
+
+    _near() {
+        const m = Main.layoutManager.primaryMonitor;
+        const [x, y] = global.get_pointer();
+        return Main.panel.hover || (!!m && x >= m.x && x < m.x + m.width && y < m.y + this._box.height + 4);
     }
 
     // Re-register the panel as chrome with or without a strut (the space windows keep free).
@@ -55,28 +76,15 @@ export class MenuBarAutohide {
         lm.trackChrome(this._box, {affectsStruts: struts, trackFullscreen: true});
     }
 
-    _poll() {
-        const m = Main.layoutManager.primaryMonitor;
-        if (!m)
-            return;
-        const [x, y] = global.get_pointer();
-        const onMonitor = x >= m.x && x < m.x + m.width;
-        const busy = Main.overview.visible || !!Main.panel.menuManager.activeMenu;
-        const near = onMonitor && y < m.y + this._box.height + 4;
-        this._away = busy || near ? 0 : this._away + POLL_MS;
-        if (this._away >= HIDE_AFTER)
-            this._slide(false);
-    }
-
     _slide(show) {
         this._shown = show;
-        this._away = 0;
         const m = Main.layoutManager.primaryMonitor;
         if (show) {
             this._edge.hide();
-            this._startPoll();
+            if (!Main.panel.hover)
+                this._startHide();
         } else {
-            this._stopPoll();
+            this._stopHide();
             if (m) {
                 this._edge.set_position(m.x, m.y);
                 this._edge.set_size(m.width, 1);
@@ -91,7 +99,8 @@ export class MenuBarAutohide {
     }
 
     destroy() {
-        this._stopPoll();
+        this._stopHide();
+        Main.panel.track_hover = this._hoverWas;
         for (const [obj, id] of this._sigs)
             obj.disconnect(id);
         this._sigs = [];
