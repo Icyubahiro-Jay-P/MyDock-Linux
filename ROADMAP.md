@@ -35,7 +35,7 @@ clock, drag to reorder, autohide, a dock on every monitor, right-click app menu.
 | Done | Progress bars and notification badges | `com.canonical.Unity.LauncherEntry` `progress` and `count` (Chrome, Telegram, Thunderbird, Nautilus), badges behind `show-badges` |
 | Done | Click on the focused app to minimize, scroll to cycle windows | Click already minimized; scroll switches windows in a fixed order (`scroll-cycles-windows`) |
 | Planned | Ctrl click hides other apps (middle click for a new window is done) | Extend `_activateApp()` |
-| Planned | Drag an icon out of the Dock to remove it, with a puff | In the drag-end handler, unpin when dropped outside the dock |
+| Done | Drag an icon out of the Dock to remove it (no puff animation yet) | `onDragCancelled()` unpins a pinned icon or removes a separator released outside the dock |
 | Not possible | Drop files on an app to open them, on Trash to delete | GNOME Shell does not receive the file list when files are dragged from an app over the shell, so an extension cannot do this |
 | Done | Hollow dot for apps whose windows are all minimized | `.mydock-dot-minimized` in the theme |
 | Planned | Stacks: Downloads, Documents, Applications | Folder tiles with Fan, Grid and List popups, `Gio.File.enumerate_children_async` |
@@ -84,12 +84,12 @@ Out of scope: desktop icons (use Desktop Icons NG) and Quick Look (use GNOME Sus
 
 ## Build order
 
-1. **Done**: repository links, window buttons on the left, traffic lights.
-2. Dock quick wins: separator and recent apps, attention bounce, click and scroll actions, drop
-   files on icons, hollow dots.
-3. Menu bar: Recent Items, Force Quit, Window menu, auto hide, Spotlight icon.
-4. Badges and progress bars, drives in the Dock.
-5. Stacks with Fan and Grid views.
-6. Dock position left and right.
-7. Global app menus, Mission Control and App Expose.
-8. Settings polish, translations, GNOME 49 and 50.
+1. **Done**: repository links, window buttons and traffic lights, attention bounce, click and scroll
+   actions, hollow dots, badges and progress bars, drag out to remove, the menu bar (Recent Items,
+   Force Quit, Window menu, auto hide, Spotlight icon, Control Center), reset to defaults, GNOME 49
+   and 50.
+2. Dock: automatic separator and recent apps, Ctrl click, drives in the Dock.
+3. Stacks with Fan and Grid views.
+4. Autohide delay and speed, then dock position left and right.
+5. Global app menus, Mission Control and App Expose.
+6. Translations and the README screenshot.
