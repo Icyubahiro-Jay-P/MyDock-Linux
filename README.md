@@ -30,11 +30,11 @@ Then **log out and back in**. Nothing needs sudo. Want to read the script first?
 
 ## Requirements
 
-- GNOME Shell **46, 47 or 48** (Ubuntu 24.04+, Fedora 40+)
+- GNOME Shell **46, 47, 48, 49 or 50** (Ubuntu 24.04, 25.04, 25.10 and 26.04 LTS, Fedora 40+)
 - X11 or Wayland
 - `gsettings`, `python3` and `glib-compile-schemas` (present on standard GNOME desktops)
 
-GNOME 49 and 50 (Ubuntu 25.10 / 26.04) are **not tested**. See [Compatibility](#compatibility).
+GNOME 49 and 50 support is new. See [Compatibility](#compatibility).
 
 ## Other install methods
 
@@ -151,7 +151,7 @@ A theme is a folder with a `stylesheet.css` and an optional `icons/` folder. Ico
 - **Other docks**: Ubuntu Dock, Dash to Dock and Dash2Dock Lite are turned off on install and restored on uninstall. Other dock extensions may conflict; disable them yourself.
 - **Minimize effects**: Magic Lamp, Burn My Windows and Compiz windows effect also animate minimize. Turn them off, or set MY DOCK FINDER FOR LINUX's minimize effect to `none`.
 - **Window buttons**: `window-buttons-left` changes the GNOME setting `org.gnome.desktop.wm.preferences button-layout` and restores your previous value when turned off or uninstalled. `traffic-lights` adds a marked block to `~/.config/gtk-3.0/gtk.css` and `~/.config/gtk-4.0/gtk.css` and removes only that block when turned off. GTK and libadwaita apps pick up the colors when they next start; Firefox, Chrome, Electron and Qt apps draw their own title bars and may not follow.
-- **GNOME 49 / 50** (Ubuntu 25.10 / 26.04): not tested. The extension only declares support for 46 to 48. Reports from newer versions are welcome.
+- **GNOME 49 / 50** (Ubuntu 25.10 / 26.04 LTS): supported since 1.2.0. These versions have no X11 session, so after an update you log out instead of restarting the shell. Please report anything that looks wrong.
 
 ## Troubleshooting
 
@@ -172,7 +172,7 @@ Common issues:
 - **Nothing changed after install**: log out and back in. On Wayland the shell cannot be restarted in place.
 - **Two docks**: another dock extension is still enabled. Check `gnome-extensions list --enabled`.
 - **Double minimize animation**: see [Compatibility](#compatibility).
-- **Extension shows as "out of date"**: your GNOME Shell version is outside 46 to 48.
+- **Extension shows as "out of date"**: your GNOME Shell version is outside 46 to 50.
 
 If none of that helps, [open a bug report](https://github.com/Icyubahiro-Jay-P/MyDock-Linux/issues/new?template=bug_report.md) with the log output.
 

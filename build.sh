@@ -27,7 +27,7 @@ cat > "$shim/metadata.json" <<'JSON'
   "uuid": "mydock@jay-p",
   "name": "MY DOCK FINDER FOR LINUX (migration)",
   "description": "Moves MY DOCK FINDER FOR LINUX to its new extension ID. Safe to ignore.",
-  "shell-version": ["46", "47", "48"]
+  "shell-version": ["46", "47", "48", "49", "50"]
 }
 JSON
 cat > "$shim/extension.js" <<'JS'
@@ -56,7 +56,7 @@ Version: $VERSION
 Section: gnome
 Priority: optional
 Architecture: all
-Depends: gnome-shell (>= 46), gnome-shell (<< 49), python3, libglib2.0-bin
+Depends: gnome-shell (>= 46), gnome-shell (<< 51), python3, libglib2.0-bin
 Maintainer: Irakoze Icyubahiro Jean Pierre <icyubahiro-jay-p@users.noreply.github.com>
 Homepage: https://github.com/Icyubahiro-Jay-P/MyDock-Linux
 Description: macOS-style dock for GNOME Shell
