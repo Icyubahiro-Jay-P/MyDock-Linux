@@ -9,7 +9,7 @@ Legend: **Done** is shipped, **Planned** is not built yet, **Not possible** cann
 Every item follows the pattern in [CONTRIBUTING.md](CONTRIBUTING.md): a key in
 `extension/schemas/org.gnome.shell.extensions.mydock.gschema.xml`, a row in the `PAGES` table in
 `extension/prefs.js`, styles in `extension/themes/default/stylesheet.css`, everything undone in
-`destroy()`, and a row in the README configuration table.
+`destroy()`, and a row for user-facing keys in the README configuration table.
 
 ## Windows (`extension/windowbuttons.js`)
 
