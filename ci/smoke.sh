@@ -76,7 +76,7 @@ dbus-run-session -- bash -c '
     ext DisableExtension >/dev/null; sleep 2
     ext EnableExtension >/dev/null; sleep 3
     ok=0; active && ok=1
-    # only the log up to here is checked: killing the shell finalizes every extension's actors,
+    # only the log up to here is checked: killing the shell finalizes the actors of every extension,
     # and distro extensions (Ubuntu dock, DING) log GC criticals then that are not ours
     wc -l <"$log" >"$log.lines"
     kill "$shell"; wait "$shell" 2>/dev/null
