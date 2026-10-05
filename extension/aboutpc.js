@@ -18,6 +18,9 @@ const DMI = '/sys/class/dmi/id';
 // SMBIOS chassis types that are portable (laptop, notebook, sub notebook, convertible, detachable ...)
 const LAPTOP_CHASSIS = [8, 9, 10, 14, 30, 31, 32];
 
+// real network hardware has a device link; bridges, veth, tun and other virtual ones don't
+export const isPhysicalNet = name => GLib.file_test(`/sys/class/net/${name}/device`, GLib.FileTest.EXISTS);
+
 function readText(path) {
     try {
         const [ok, bytes] = GLib.file_get_contents(path);
@@ -248,7 +251,7 @@ function diskSampler() {
 function netSampler() {
     let prev = null;
     return () => {
-        const net = parseNetDev(readText('/proc/net/dev'));
+        const net = parseNetDev(readText('/proc/net/dev'), isPhysicalNet);
         const now = GLib.get_monotonic_time();
         let down = null, up = null;
         if (net && prev) {
