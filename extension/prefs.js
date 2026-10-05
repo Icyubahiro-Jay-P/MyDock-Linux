@@ -14,8 +14,10 @@ import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/ex
 import {compareVersions} from './version.js';
 import {CLOCK_PRESETS, presetIndex} from './clockpresets.js';
 
-// Settings the user never sees; Reset leaves them alone.
-const INTERNAL_KEYS = new Set(['saved-button-layout', 'last-update-check', 'skipped-version']);
+// Settings the user never sees or arranges by hand elsewhere (dock separators, Finder bar order);
+// Reset leaves them alone.
+const INTERNAL_KEYS = new Set(['saved-button-layout', 'last-update-check', 'skipped-version',
+    'dock-separators', 'finderbar-order']);
 
 // [page title, icon, badge color, groups, style?]
 // A group is [title, [key, ...], footnote?] or the name of a custom builder in CUSTOM_GROUPS.
@@ -169,6 +171,14 @@ export default class MyDockPrefs extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         const settings = this.getSettings();
         window._settings = settings; // keep alive with the window
+        // the prefs process outlives the window: drop every handler (they touch its widgets) on close
+        const settingsIds = [];
+        const connect = settings.connect.bind(settings);
+        settings.connect = (sig, fn) => {
+            const id = connect(sig, fn);
+            settingsIds.push(id);
+            return id;
+        };
         const schema = settings.settings_schema;
 
         const css = new Gtk.CssProvider();
@@ -412,7 +422,12 @@ export default class MyDockPrefs extends ExtensionPreferences {
             settings.set_string('skipped-version', '');
             settings.set_int64('last-update-check', 0);
             updateNow.visible = false;
-            status.title = 'Look for the update notification at the top of the screen.';
+            // only the running extension acts on it
+            const shell = new Gio.Settings({schema_id: 'org.gnome.shell'});
+            const on = !shell.get_boolean('disable-user-extensions') &&
+                shell.get_strv('enabled-extensions').includes(this.uuid);
+            status.title = on ? 'Look for the update notification at the top of the screen.'
+                : `Turn ${name} on to install the update; it starts once the extension runs.`;
         });
         const auto = this._row(settings, schema.get_key('check-updates'), 'check-updates', TITLES['check-updates']);
         update.add(status);
@@ -471,6 +486,9 @@ export default class MyDockPrefs extends ExtensionPreferences {
         reset.add(resetRow);
 
         window.connect('close-request', () => {
+            for (const id of settingsIds)
+                settings.disconnect(id);
+            settingsIds.length = 0;
             cancellable?.cancel();
             if (copyTimer)
                 GLib.source_remove(copyTimer);
