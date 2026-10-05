@@ -370,11 +370,13 @@
     font-size: 10pt;
     font-weight: bold;
     font-feature-settings: "tnum";
+    min-width: 2.8em; /* fits "100%": the bar doesn't relayout as values change length */
 }
 /* two lines must fit the 24px bar */
 .mydock-stat-net {
     font-size: 7pt;
     text-align: right;
+    min-width: 4.6em; /* fits "999KB/s" */
 }
 
 /* ---- stagemanager ---- */
