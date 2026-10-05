@@ -29,7 +29,7 @@ for t in extension/*.test.mjs; do node "$t"; done
 python3 ci/bump_test.py
 ```
 
-Each `*.test.mjs` covers a module with no GNOME imports (`deform-math.js`, `version.js`, `panel-order.js`, `clockpresets.js` and the `sysinfo.js` parsers), so it runs under plain Node. Add a case when you change one. `shell-range.test.mjs` checks that the supported GNOME versions agree everywhere they are written (`metadata.json`, `install-stub.sh`, `build.sh`).
+Each `*.test.mjs` covers a module with no GNOME imports (`deform-math.js`, `version.js`, `panel-order.js`, `clockpresets.js`, `calendar-math.js`, `format.js` and the `sysinfo.js` parsers), so it runs under plain Node. Add a case when you change one. `shell-range.test.mjs` checks that the supported GNOME versions agree everywhere they are written (`metadata.json`, `install-stub.sh`, `build.sh`).
 
 The smoke test starts a headless GNOME Shell with your working copy, flips every on/off and enum setting, imports prefs.js, disables and re-enables the extension, and fails on any error the shell logs. It uses its own D-Bus session and home folder, so it does not touch your desktop. CI runs it on GNOME 46, 47, 48, 49 and 50:
 
@@ -138,7 +138,7 @@ New settings go in `extension/schemas/org.gnome.shell.extensions.mydock.gschema.
 
 ## Releasing (maintainers)
 
-**One step, from any browser or the GitHub app:** Actions > build > **Run workflow** on `main`, type the new version (for example `1.2.1`) and run it. CI checks the GNOME smoke tests, sets `"version-name"` and bumps `"version"` in `extension/metadata.json` (`ci/bump.py`), commits that to `main`, then builds and publishes the `v1.2.1` release. Leave the version empty to publish the version already in `metadata.json`.
+**One step, from any browser or the GitHub app:** Actions > build > **Run workflow** on `main`, type the new version (for example `1.2.1`) and run it. CI checks the GNOME smoke tests, sets `"version-name"` and bumps `"version"` in `extension/metadata.json` (`ci/bump.py`), commits that to `main`, then builds and publishes the `v1.2.1` release. Leave the version empty to publish the version already in `metadata.json`. If a Run workflow release failed after the version commit, run it again with the version empty.
 
 **By hand:** set the version with `python3 ci/bump.py 1.2.1`, commit and merge to `main`, then tag and push the tag:
 
