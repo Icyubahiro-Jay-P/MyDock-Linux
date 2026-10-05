@@ -320,6 +320,8 @@ class DockItem extends St.Button {
         if (n !== null && !this._badge) {
             this._badge = new St.Label({style_class: 'mydock-badge'});
             this._slot.add_child(this._badge);
+            // sizes are only valid on stage: (re)place once it is shown
+            this._badge.connect('notify::mapped', () => this._placeBadge());
             // ride along with the bounce
             this._icon.bind_property('translation-y', this._badge, 'translation-y', GObject.BindingFlags.SYNC_CREATE);
         }
@@ -334,7 +336,7 @@ class DockItem extends St.Button {
 
     // follows the icon as it magnifies: the icon is pivoted at its bottom center
     _placeBadge() {
-        if (!this._badge?.visible)
+        if (!this._badge?.visible || !this._badge.get_stage())
             return;
         const {S, M} = this._bar.geom;
         const size = M * this._icon.scale_x;
@@ -420,7 +422,9 @@ class DockItem extends St.Button {
                 this._icon.translation_y = 0;
         };
         const step = () => {
-            if (!this._bouncing || !keepGoing()) {
+            // an unmapped icon or disabled animations complete eases synchronously: no recursion
+            if (!this._bouncing || !keepGoing() || this._gone || !this._icon.mapped ||
+                !St.Settings.get().enable_animations) {
                 reset();
                 return;
             }
