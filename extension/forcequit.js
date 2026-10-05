@@ -1,22 +1,34 @@
 // Force Quit Applications dialog, opened from the Finder bar logo menu (finderbar.js).
 // Lists the running apps; "Force Quit" kills the selected app's windows right away, like macOS.
 import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 import * as ModalDialog from 'resource:///org/gnome/shell/ui/modalDialog.js';
 
 let _dialog = null;
 
-// Kill every window of the app (SIGKILL on X11, the client connection on Wayland). An app with
-// no windows only gets a polite quit request.
+// Kill every window of the app (SIGKILL on X11, the client connection on Wayland), then SIGKILL
+// its processes: on Wayland a hung client survives losing its connection. An app with no windows
+// only gets a polite quit request.
 export function forceQuit(app) {
     const wins = app.get_windows();
     if (!wins.length) {
         app.request_quit();
         return;
     }
+    const self = new Gio.Credentials().get_unix_pid();
+    const pids = new Set(wins.map(w => w.get_pid()).filter(pid => pid > 1 && pid !== self));
     for (const w of wins)
         w.kill();
+    for (const pid of pids) {
+        try {
+            // async, and GSubprocess reaps it on its own
+            Gio.Subprocess.new(['kill', '-KILL', `${pid}`], Gio.SubprocessFlags.STDERR_SILENCE);
+        } catch (e) {
+            logError(e, `MyDock: cannot kill ${pid}`);
+        }
+    }
 }
 
 export function showForceQuit() {
