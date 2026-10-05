@@ -58,6 +58,11 @@ restore_windows() {
     return 0
 }
 
+case "$*" in
+    ""|--uninstall|"--uninstall --purge") ;;
+    *) echo "Usage: bash $0 [--uninstall [--purge]]" >&2; exit 2 ;;
+esac
+
 if [[ "${1:-}" == "--uninstall" ]]; then
     set_enabled "$UUID" off
     set_enabled "$OLD_UUID" off
@@ -70,7 +75,7 @@ if [[ "${1:-}" == "--uninstall" ]]; then
             echo "dconf not found, settings were kept (sudo apt install dconf-cli)." >&2
         fi
     fi
-    rm -rf "$DEST" "$OLD_DEST"
+    rm -rf "$DEST" "$DEST.new" "$OLD_DEST"
     if [[ -f "$STATE" ]]; then
         while read -r u; do [[ -n "$u" ]] && set_enabled "$u" on; done < "$STATE"
         rm -f "$STATE"
