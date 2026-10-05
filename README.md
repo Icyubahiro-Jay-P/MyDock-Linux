@@ -40,7 +40,7 @@ GNOME 49 and 50 support is new. See [Compatibility](#compatibility).
 
 ### .deb package (Ubuntu, Debian)
 
-Download `dock_<version>_all.deb` (for example `dock_1.2.2_all.deb`) from the [Releases page](https://github.com/Icyubahiro-Jay-P/MyDock-Linux/releases), then:
+Download `dock_<version>_all.deb` (for example `dock_1.2.3_all.deb`) from the [Releases page](https://github.com/Icyubahiro-Jay-P/MyDock-Linux/releases), then:
 
 ```bash
 sudo apt install ./dock_<version>_all.deb
