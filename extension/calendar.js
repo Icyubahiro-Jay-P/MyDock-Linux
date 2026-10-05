@@ -21,7 +21,7 @@ function cell(text, styleClass) {
 // month grid with today circled.
 // refresh() rebuilds only when the date changed.
 export function makeMonthCalendar() {
-    const w = new St.BoxLayout({style_class: 'mydock-month', orientation: Clutter.Orientation.VERTICAL, visible: false});
+    const w = new St.BoxLayout({style_class: 'mydock-month', vertical: true, visible: false});
     const header = new St.Label({style_class: 'mydock-month-header'});
     const layout = new Clutter.GridLayout({row_spacing: 6, column_spacing: 6});
     const grid = new St.Widget({style_class: 'mydock-month-grid', layout_manager: layout});
