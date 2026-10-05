@@ -88,7 +88,9 @@ Uninstalling removes MY DOCK FINDER FOR LINUX and turns your previous dock back 
 | Single file | `bash dock-install.sh --uninstall` |
 | Source | `bash dist/dock-install.sh --uninstall` |
 
-Log out and back in afterwards.
+Log out and back in afterwards. Add `--purge` after `--uninstall` to also reset all MY DOCK FINDER FOR LINUX settings.
+
+With the .deb, run `dock --uninstall` as every user who ran `dock` before `sudo apt remove dock`: apt cannot reach per-user settings, so removing the package alone leaves your window button layout, the traffic light block in `gtk.css` and your old dock's on/off state as they were. If the package is already gone, the one-liner uninstall above does the same.
 
 ## Updates
 
@@ -196,7 +198,7 @@ Run the tests:
 for t in extension/*.test.mjs; do node "$t"; done
 ```
 
-CI (`.github/workflows/build.yml`) runs on every push and pull request: it starts a headless GNOME Shell 46, 48, 49 and 50 with the extension and fails on any error it logs (`ci/smoke.sh`), then runs the tests, shellcheck and the build. Releases are published from the Actions tab with **Run workflow** (see [CONTRIBUTING.md](CONTRIBUTING.md#releasing-maintainers)), or by pushing a tag like `v1.2.0`.
+CI (`.github/workflows/build.yml`) runs on pushes to `main`, on `v*` tags and on pull requests: it starts a headless GNOME Shell 46, 47, 48, 49 and 50 with the extension and fails on any error it logs (`ci/smoke.sh`). Only when those pass does it run the tests, shellcheck and the build. Releases are published from the Actions tab with **Run workflow** (see [CONTRIBUTING.md](CONTRIBUTING.md#releasing-maintainers)), or by pushing a tag like `v1.2.0`.
 
 ## Roadmap
 
