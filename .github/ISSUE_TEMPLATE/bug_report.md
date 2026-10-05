@@ -2,7 +2,7 @@
 name: Bug report
 about: Something in MY DOCK FINDER FOR LINUX is broken or behaves wrongly
 title: ''
-labels: bug, enhancement
+labels: bug
 assignees: ''
 
 ---
