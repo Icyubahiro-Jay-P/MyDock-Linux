@@ -2,7 +2,11 @@
 # MY DOCK FINDER FOR LINUX single-file installer for GNOME Shell 46-50 (Ubuntu 24.04+).
 #   bash dock-install.sh              install / update
 #   bash dock-install.sh --uninstall  remove and restore the previous dock
+#   bash dock-install.sh --uninstall --purge  also reset all MY DOCK FINDER FOR LINUX settings
 set -euo pipefail
+
+# Everything here is per user (~/.local, gsettings). As root it would land in root's home.
+(( EUID != 0 )) || { echo "Run this as your normal user, not as root or with sudo." >&2; exit 1; }
 
 UUID="mydock@icyubahiro-jay-p"
 # Extension ID used up to 1.1.0. Same settings schema, so settings carry over.
@@ -17,8 +21,9 @@ EFFECTS=(compiz-alike-magic-lamp-effect@hermes83.github.com burn-my-windows@schn
 # Keep in sync with "shell-version" in metadata.json: GNOME refuses to load the extension on other versions.
 MIN_SHELL=46 MAX_SHELL=50
 
-is_enabled()  { gsettings get org.gnome.shell enabled-extensions | grep -q "'$1'"; }
-is_disabled() { gsettings get org.gnome.shell disabled-extensions | grep -q "'$1'"; }
+# [[ ]] instead of | grep -q: under pipefail an early grep exit can fail the pipe
+is_enabled()  { [[ $(gsettings get org.gnome.shell enabled-extensions) == *"'$1'"* ]]; }
+is_disabled() { [[ $(gsettings get org.gnome.shell disabled-extensions) == *"'$1'"* ]]; }
 # Ubuntu Dock is a session-mode extension: it is on without being in enabled-extensions,
 # so treat any installed dock that is not explicitly disabled as running.
 is_installed() { [[ -d "$HOME/.local/share/gnome-shell/extensions/$1" || -d "/usr/share/gnome-shell/extensions/$1" ]]; }
@@ -57,6 +62,14 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     set_enabled "$UUID" off
     set_enabled "$OLD_UUID" off
     restore_windows
+    if [[ "${2:-}" == "--purge" ]]; then
+        if command -v dconf >/dev/null; then
+            dconf reset -f /org/gnome/shell/extensions/mydock/
+            echo "MY DOCK FINDER FOR LINUX settings reset."
+        else
+            echo "dconf not found, settings were kept (sudo apt install dconf-cli)." >&2
+        fi
+    fi
     rm -rf "$DEST" "$OLD_DEST"
     if [[ -f "$STATE" ]]; then
         while read -r u; do [[ -n "$u" ]] && set_enabled "$u" on; done < "$STATE"
@@ -75,10 +88,14 @@ ver=$(gnome-shell --version | grep -oE '[0-9]+' | head -1)
 # No payload after the marker = shipped standalone as dock by the .deb.
 if [[ -n "$(awk 'f{print;exit} /^__PAYLOAD__$/{f=1}' "$0")" ]]; then
     echo "Installing MY DOCK FINDER FOR LINUX to $DEST"
+    [[ -d "$SYS" ]] && echo "Note: this per-user copy takes precedence over the dock package in $SYS until you run dock --uninstall."
+    # Unpack next to the old copy and swap at the end, so a failed unpack leaves the old one working.
+    rm -rf "$DEST.new"
+    mkdir -p "$DEST.new"
+    sed '1,/^__PAYLOAD__$/d' "$0" | base64 -d | tar xz -C "$DEST.new"
+    glib-compile-schemas "$DEST.new/schemas"
     rm -rf "$DEST"
-    mkdir -p "$DEST"
-    sed '1,/^__PAYLOAD__$/d' "$0" | base64 -d | tar xz -C "$DEST"
-    glib-compile-schemas "$DEST/schemas"
+    mv "$DEST.new" "$DEST"
 elif [[ -d "$SYS" ]]; then
     echo "Using system-wide MY DOCK FINDER FOR LINUX at $SYS"
     # A per-user copy wins over the package files, so drop any old one.
@@ -112,6 +129,7 @@ done
 set_enabled "$UUID" on
 echo
 echo "Done. Log out and back in to start MY DOCK FINDER FOR LINUX (Wayland cannot reload the shell)."
+[[ "${XDG_SESSION_TYPE:-}" == x11 ]] && echo "On X11 you can instead restart the shell: press Alt+F2, type r, press Enter."
 echo "Settings: gnome-extensions prefs $UUID"
 exit 0
 # shellcheck disable=SC2317 # marker line, never executed: the base64 payload follows
