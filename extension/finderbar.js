@@ -18,7 +18,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as Util from 'resource:///org/gnome/shell/misc/util.js';
 import * as SystemActions from 'resource:///org/gnome/shell/misc/systemActions.js';
 import {AppMenu} from 'resource:///org/gnome/shell/ui/appMenu.js';
-import {showAboutPC, closeAboutPC, attachStatPopup} from './aboutpc.js';
+import {showAboutPC, closeAboutPC, attachStatPopup, isPhysicalNet} from './aboutpc.js';
 import {showForceQuit, closeForceQuit} from './forcequit.js';
 import {mergeOrder} from './panel-order.js';
 import {parseCpuStat, cpuUsage, parseMemInfo, parseNetDev, formatRate} from './sysinfo.js';
@@ -52,25 +52,35 @@ function readText(path) {
     }
 }
 
-// newest RECENT_MAX local files in the GTK recent list that still exist, as [uri, name]
-function recentFiles() {
+// newest RECENT_MAX local files in the GTK recent list that still exist, as [uri, name], passed
+// to done(). The checks are async so a file on a hung network mount can't freeze the shell.
+// ponytail: only the newest RECENT_MAX * 3 are checked, so many deleted ones can shorten the list
+function recentFiles(done) {
     const bf = new GLib.BookmarkFile();
     try {
         bf.load_from_file(GLib.build_filenamev([GLib.get_user_data_dir(), 'recently-used.xbel']));
     } catch {
-        return [];
+        done([]);
+        return;
     }
-    const out = [];
     const uris = bf.get_uris().filter(u => u.startsWith('file://'))
-        .map(u => [u, bf.get_modified_date_time(u)?.to_unix() ?? 0]).sort((a, b) => b[1] - a[1]);
-    for (const [uri] of uris) {
-        const file = Gio.File.new_for_uri(uri);
-        if (file.query_exists(null))
-            out.push([uri, file.get_basename()]);
-        if (out.length === RECENT_MAX)
-            break;
-    }
-    return out;
+        .map(u => [u, bf.get_modified_date_time(u)?.to_unix() ?? 0]).sort((a, b) => b[1] - a[1])
+        .slice(0, RECENT_MAX * 3);
+    const found = [];
+    let pending = uris.length;
+    if (!pending)
+        done([]);
+    uris.forEach(([uri], i) => {
+        Gio.File.new_for_uri(uri).query_info_async('standard::type', Gio.FileQueryInfoFlags.NONE,
+            GLib.PRIORITY_DEFAULT, null, (file, res) => {
+                try {
+                    file.query_info_finish(res);
+                    found[i] = [uri, file.get_basename()];
+                } catch {}
+                if (--pending === 0)
+                    done(found.filter(f => f).slice(0, RECENT_MAX));
+            });
+    });
 }
 
 // CPU package temperature: coretemp / k10temp hwmon, else the x86_pkg_temp or first thermal zone
@@ -244,7 +254,17 @@ export class FinderBar {
 
     _fillRecent(menu) {
         menu.removeAll();
-        const files = recentFiles();
+        // a PopupSubMenu with no items would not open
+        menu.addMenuItem(new PopupMenu.PopupMenuItem('Loading...', {reactive: false}));
+        const gen = this._recentGen = (this._recentGen ?? 0) + 1;
+        recentFiles(files => {
+            if (this._ext && gen === this._recentGen)
+                this._showRecent(menu, files);
+        });
+    }
+
+    _showRecent(menu, files) {
+        menu.removeAll();
         for (const [uri, name] of files) {
             menu.addAction(name, () => {
                 try {
@@ -511,14 +531,22 @@ export class FinderBar {
             this._prevCpu = null;
         }
 
+        // async: an ACPI thermal zone read can block for a long time
         if (shown('temp')) {
-            const temp = parseInt(readText(this._tempFile));
-            if (isNaN(temp)) {
-                this._statOk.temp = false;
-                this._syncStat('temp');
-            } else {
-                this._stat.temp.text = `${Math.round(temp / 1000)}°`;
-            }
+            Gio.File.new_for_path(this._tempFile).load_contents_async(null, (f, res) => {
+                if (!this._stat?.temp)
+                    return; // temp stat turned off / destroyed meanwhile
+                let temp = NaN;
+                try {
+                    temp = parseInt(new TextDecoder().decode(f.load_contents_finish(res)[1]));
+                } catch {}
+                if (isNaN(temp)) {
+                    this._statOk.temp = false;
+                    this._syncStat('temp');
+                } else {
+                    this._stat.temp.text = `${Math.round(temp / 1000)}°`;
+                }
+            });
         }
 
         if (shown('mem')) {
@@ -546,7 +574,7 @@ export class FinderBar {
         }
 
         if (shown('net')) {
-            const net = parseNetDev(readText('/proc/net/dev'));
+            const net = parseNetDev(readText('/proc/net/dev'), isPhysicalNet);
             const now = GLib.get_monotonic_time();
             if (net && this._prevNet) {
                 const dt = (now - this._prevNet.time) / 1e6;
@@ -731,7 +759,9 @@ export class FinderBar {
         Main.uiGroup.add_child(marker);
         clone.set_position(ax, ay);
         actor.opacity = 80;
-        this._drag = {actor, clone, marker, dx: px - ax, dy: py - ay, target: null};
+        // the item can go away mid-drag (its extension disabled, tray icon closed)
+        const destroyId = actor.connect('destroy', () => this._endDrag(false));
+        this._drag = {actor, clone, marker, dx: px - ax, dy: py - ay, target: null, destroyId};
         // keep receiving motion/release when the pointer leaves the panel
         this._grab = global.stage.grab(Main.panel);
         this._moveDrag(ev);
@@ -801,6 +831,7 @@ export class FinderBar {
         if (!d)
             return;
         this._drag = null;
+        d.actor.disconnect(d.destroyId);
         this._grab?.dismiss();
         this._grab = null;
         d.clone.destroy();
@@ -894,9 +925,12 @@ export class FinderBar {
             this._dateParent.insert_child_at_index(dateBox,
                 Math.min(Math.max(this._dateIndex, 0), this._dateParent.get_n_children()));
         }
-        // Clutter.Actor has no set_visible(); use the property
-        if (panel.statusArea.activities)
-            panel.statusArea.activities.container.visible = this._activitiesVisible;
+        // Clutter.Actor has no set_visible(); use the property. Not on the lock screen, whose
+        // session mode has no Activities button (the panel may have updated before we got here)
+        if (panel.statusArea.activities) {
+            panel.statusArea.activities.container.visible = this._activitiesVisible &&
+                Main.sessionMode.panel.left.includes('activities');
+        }
         Main.messageTray.bannerAlignment = this._bannerAlignment;
 
         this._ext = null;
