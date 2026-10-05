@@ -128,6 +128,7 @@ Every setting applies live. Key settings (schema `org.gnome.shell.extensions.myd
 | Dock | `scroll-cycles-windows` | `true` | Scroll on an app icon to switch between its windows |
 | Finder bar | `finderbar-enabled` | `true` | macOS-style top bar |
 | Finder bar | `finderbar-status-menus` | `true` | Wi-Fi, Bluetooth, sound, display, battery, account menus and a Control Center in the Finder bar |
+| Finder bar | `finderbar-stats` | `true` | CPU, temperature, memory, disk and network in the top bar (turning it off saves most idle CPU) |
 | Finder bar | `time-format` | `'%a %-d %b  %-I:%M %p'` | Clock format (GLib strftime); Settings offers presets |
 | Finder bar | `finderbar-autohide` | `false` | Hide the menu bar until the pointer touches the top edge (works even with the Finder bar off) |
 | Finder bar | `show-spotlight` | `true` | Search icon that opens the overview with the search field focused |
