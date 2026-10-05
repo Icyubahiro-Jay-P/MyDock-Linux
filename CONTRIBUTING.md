@@ -25,10 +25,10 @@ Re-run the last two commands after each change, then test in a nested shell (bel
 ## Running tests
 
 ```bash
-node extension/deform-math.test.mjs
+for t in extension/*.test.mjs; do node "$t"; done
 ```
 
-`deform-math.js` is pure math (the genie and suck vertex functions) with no GNOME imports, so it runs under plain Node. Add a case there when you change it.
+Each `*.test.mjs` covers a module with no GNOME imports (`deform-math.js`, `version.js`, `panel-order.js`, `clockpresets.js` and the `sysinfo.js` parsers), so it runs under plain Node. Add a case when you change one.
 
 Lint the shell scripts the same way CI does:
 
@@ -71,6 +71,9 @@ extension/
   stagemanager.js           Stage Manager strip
   minimize.js               minimize animations
   windowbuttons.js          window buttons on the left, traffic light colors
+  menubarhide.js            hide and show the menu bar automatically
+  forcequit.js              Force Quit Applications dialog
+  clockpresets.js           clock format presets for the settings window
   deform-math.js            pure math for genie/suck (tested by deform-math.test.mjs)
   prefs.js                  settings window, rows generated from tables
   schemas/                  GSettings schema
@@ -105,7 +108,7 @@ New settings go in `extension/schemas/org.gnome.shell.extensions.mydock.gschema.
 
 ## Pull request checklist
 
-- [ ] `node extension/deform-math.test.mjs` passes
+- [ ] Every `extension/*.test.mjs` passes
 - [ ] `./build.sh` succeeds
 - [ ] `shellcheck` is clean for any shell script you touched
 - [ ] Tested on GNOME Shell 46 to 50 (say which, and X11 or Wayland)

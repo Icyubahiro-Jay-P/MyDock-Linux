@@ -12,6 +12,7 @@ import Soup from 'gi://Soup?version=3.0';
 import {ExtensionPreferences} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 import {compareVersions} from './version.js';
+import {CLOCK_PRESETS, presetIndex} from './clockpresets.js';
 
 // Settings the user never sees; Reset leaves them alone.
 const INTERNAL_KEYS = new Set(['saved-button-layout', 'last-update-check', 'skipped-version']);
@@ -51,11 +52,12 @@ const PAGES = [
     ]],
     'MyFinder',
     ['Look & Behaviour', 'focus-top-bar-symbolic', 'dark', [
-        ['', ['logo-path', 'finderbar-blur', 'finderbar-status-menus', 'window-buttons-left', 'traffic-lights'],
+        ['', ['logo-path', 'finderbar-blur', 'finderbar-autohide', 'show-spotlight', 'finderbar-status-menus',
+            'window-buttons-left', 'traffic-lights'],
             'Traffic light colors apply to GTK apps you open next; restart open apps to see them.'],
     ]],
     ['Time & Date', 'x-office-calendar-symbolic', 'blue', [
-        ['', ['time-format'], 'The clock uses GLib strftime codes, for example %a %-d %b  %-I:%M %p.'],
+        ['', ['time-format'], 'Pick a style, or Custom to type GLib strftime codes, for example %a %-d %b  %-I:%M %p.'],
     ]],
     ['Hardware Status', 'mydock-cpu-symbolic', 'red', [
         ['', ['finderbar-stats']],
@@ -91,6 +93,8 @@ const TITLES = {
     'show-clock': 'Show a live clock in the Dock',
     'finderbar-enabled': 'Enable myFinder',
     'finderbar-blur': 'Translucent Finder background',
+    'finderbar-autohide': 'Automatically hide and show the menu bar',
+    'show-spotlight': 'Show the Spotlight search icon',
     'finderbar-status-menus': 'Show status menus and Control Center in Finder',
     'finderbar-stats': 'Show hardware status in Finder',
     'stats-cpu': 'Processor',
@@ -577,19 +581,41 @@ function slider(settings, key, lo, hi, unit) {
     return scale;
 }
 
-// Plain text field; the clock format also shows what it renders right now.
+// Plain text field. The clock format gets a preset popup on top; the raw field and what it
+// renders right now show only for "Custom".
 function textEntry(settings, key) {
     const entry = new Gtk.Entry({width_chars: 26, halign: Gtk.Align.START, css_classes: ['mydock-entry']});
     settings.bind(key, entry, 'text', Gio.SettingsBindFlags.DEFAULT);
     if (key !== 'time-format')
         return entry;
     const sample = new Gtk.Label({xalign: 0, css_classes: ['dim-label', 'mydock-sample']});
-    const sync = () => (sample.label = GLib.DateTime.new_now_local().format(settings.get_string(key)) || 'Invalid format');
+    const now = GLib.DateTime.new_now_local();
+    const names = [...CLOCK_PRESETS.map(([name, f]) => `${name} (${now.format(f).replace(/\s+/g, ' ')})`), 'Custom'];
+    const drop = new Gtk.DropDown({model: Gtk.StringList.new(names), halign: Gtk.Align.START, css_classes: ['mydock-popup']});
+    const custom = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 4});
+    custom.append(entry);
+    custom.append(sample);
+    let customPicked = false; // "Custom" chosen while the text still matches a preset
+    const sync = () => {
+        const fmt = settings.get_string(key);
+        sample.label = GLib.DateTime.new_now_local().format(fmt) || 'Invalid format';
+        const i = customPicked ? CLOCK_PRESETS.length : presetIndex(fmt);
+        if (drop.selected !== i)
+            drop.selected = i;
+        custom.visible = i === CLOCK_PRESETS.length;
+    };
+    drop.connect('notify::selected', () => {
+        const i = drop.selected;
+        customPicked = i === CLOCK_PRESETS.length;
+        if (!customPicked && settings.get_string(key) !== CLOCK_PRESETS[i][1])
+            settings.set_string(key, CLOCK_PRESETS[i][1]);
+        sync();
+    });
     settings.connect(`changed::${key}`, sync);
     sync();
-    const box = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 4});
-    box.append(entry);
-    box.append(sample);
+    const box = new Gtk.Box({orientation: Gtk.Orientation.VERTICAL, spacing: 6});
+    box.append(drop);
+    box.append(custom);
     return box;
 }
 

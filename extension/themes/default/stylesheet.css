@@ -1122,3 +1122,32 @@
 .mydock-media-compact .mydock-media-button StIcon {
     icon-size: 16px;
 }
+
+/* ---- Force Quit Applications dialog (forcequit.js) ---- */
+.mydock-forcequit .modal-dialog-content-box {
+  spacing: 8px;
+  padding: 18px 18px 12px 18px;
+}
+.mydock-forcequit-title {
+  font-weight: bold;
+  font-size: 12pt;
+}
+.mydock-forcequit-hint {
+  font-size: 9.5pt;
+  color: rgba(255, 255, 255, 0.6);
+}
+.mydock-forcequit-list {
+  min-width: 320px;
+  padding: 4px;
+  spacing: 2px;
+  border-radius: 8px;
+  background-color: rgba(0, 0, 0, 0.25);
+}
+.mydock-forcequit-row {
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.mydock-forcequit-row:hover { background-color: rgba(255, 255, 255, 0.08); }
+.mydock-forcequit-row.selected,
+.mydock-forcequit-row.selected:focus { background-color: #0a84ff; color: #ffffff; }
+.mydock-forcequit-row-box { spacing: 8px; }
