@@ -38,7 +38,7 @@ jobs:
           - {gnome: '49', image: 'registry.fedoraproject.org/fedora:43'}
           - {gnome: '50', image: 'registry.fedoraproject.org/fedora:44'}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install GNOME Shell
         run: |
           if command -v dnf >/dev/null; then
@@ -56,7 +56,7 @@ jobs:
     needs: smoke
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends shellcheck libglib2.0-bin
       - name: Set the release version
         if: github.event_name == 'workflow_dispatch' && inputs.version != ''
@@ -72,7 +72,7 @@ jobs:
       - run: for t in extension/*.test.mjs; do node "$t"; done
       - run: shellcheck install.sh install-stub.sh build.sh ci/smoke.sh
       - run: bash build.sh && (cd dist && sha256sum dock-install.sh ./*.deb > SHA256SUMS)
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/*
