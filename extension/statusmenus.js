@@ -970,6 +970,8 @@ class TrayItem extends StatusItem {
         this.btn.add_style_class_name('mydock-tray-button');
         this.btn.menu.actor.add_style_class_name('mydock-tray-menu');
         this._hidden = new Map(); // container -> its visibility before we hid it
+        // at shell shutdown the panel is torn down under us (no disable()): stop touching it
+        this.btn.connect('destroy', () => (this._btnGone = true));
         const p = Main.panel;
         for (const box of [p._leftBox, p._centerBox, p._rightBox]) {
             for (const sig of ['child-added', 'child-removed'])
@@ -994,6 +996,8 @@ class TrayItem extends StatusItem {
     }
 
     _sync() {
+        if (this._btnGone)
+            return;
         const current = new Set(this._indicators().map(ind => ind.container));
         for (const c of [...this._hidden.keys()]) {
             if (!current.has(c))
