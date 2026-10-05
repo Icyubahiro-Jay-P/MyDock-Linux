@@ -197,7 +197,8 @@ export class Launchpad {
     }
 
     _buildTile(app) {
-        const tile = new St.Button({style_class: 'mydock-launchpad-tile', can_focus: true, reactive: true});
+        // hidden until _filter() places it: ~200 tiles must not all map and style on open
+        const tile = new St.Button({style_class: 'mydock-launchpad-tile', can_focus: true, reactive: true, visible: false});
         const box = new St.BoxLayout({vertical: true, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
         const gicon = this._ext.iconOverride?.(app.get_id());
         const icon = gicon
