@@ -23,6 +23,7 @@ import {Slider} from 'resource:///org/gnome/shell/ui/slider.js';
 import {BarLevel} from 'resource:///org/gnome/shell/ui/barLevel.js';
 import {MprisPlayer} from 'resource:///org/gnome/shell/ui/mpris.js';
 import {Avatar} from 'resource:///org/gnome/shell/ui/userWidget.js';
+import {signalLevel, formatTime} from './format.js';
 
 // The parts of each D-Bus interface we use. Kept here rather than loaded from GNOME Shell's own
 // copies, which are private and get renamed or dropped between releases (power profiles in 47,
@@ -77,21 +78,6 @@ const BATTERY_STATE = {
     [UPower.DeviceState.PENDING_CHARGE]: 'Power Source Connected, Not Charging',
     [UPower.DeviceState.PENDING_DISCHARGE]: 'On Battery',
 };
-
-function signalLevel(strength) {
-    if (strength < 20)
-        return 'none';
-    if (strength < 40)
-        return 'weak';
-    if (strength < 50)
-        return 'ok';
-    return strength < 80 ? 'good' : 'excellent';
-}
-
-function formatTime(us) {
-    const s = Math.max(0, Math.floor(us / 1e6));
-    return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-}
 
 // the matching Settings panel (gnome-<name>-panel.desktop), else gnome-control-center <name>
 function openPanel(name) {
@@ -1127,6 +1113,9 @@ class ControlCenter extends StatusItem {
         if (qs) {
             this._qsVisible = qs.container.visible;
             qs.container.hide();
+            // a session mode update re-shows the panel's built-in items
+            this._connect(Main.sessionMode, 'updated', () => qs.container.hide());
+            this._qsSource = qs.menu.sourceActor;
         }
         // Super+S opens ours (the prototype's version is back once this own property is deleted)
         Main.panel.toggleQuickSettings = () => Main.panel._toggleMenu(this.btn);
@@ -1315,6 +1304,18 @@ class ControlCenter extends StatusItem {
         media.bind_property('visible', mediaTile, 'visible', GObject.BindingFlags.SYNC_CREATE);
         grid.add_child(mediaTile);
 
+        // toggles other extensions add live only in GNOME's quick settings menu: open it under our
+        // button (its own is hidden)
+        const qsMenu = this._qs?.menu;
+        if (qsMenu) {
+            menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+            menu.addAction('More Controls…', () => {
+                this.btn.menu.close();
+                qsMenu.sourceActor = this.btn;
+                qsMenu.toggle();
+            });
+        }
+
         sync();
     }
 
@@ -1331,8 +1332,10 @@ class ControlCenter extends StatusItem {
         for (const [actor, index] of this._detached.reverse())
             box.insert_child_at_index(actor, Math.min(index, box.get_n_children()));
         this._detached = [];
-        if (qs)
+        if (qs) {
             qs.container.visible = this._qsVisible;
+            qs.menu.sourceActor = this._qsSource;
+        }
         this._qs = null;
         super.destroy();
         this._notif = null;
