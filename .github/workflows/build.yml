@@ -5,6 +5,8 @@ on:
     branches: [main]
     tags: ['v*']
   pull_request:
+  # "Run workflow" on main publishes v<version-name> from metadata.json (no tag push needed)
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -27,16 +29,23 @@ jobs:
           name: dist
           path: dist/*
       - name: Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           want="v$(python3 -c 'import json; print(json.load(open("extension/metadata.json"))["version-name"])')"
-          [[ "$GITHUB_REF_NAME" == "$want" ]] || { echo "Tag $GITHUB_REF_NAME does not match metadata version-name ($want)"; exit 1; }
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            [[ "$GITHUB_REF" == refs/heads/main ]] || { echo "Publish releases from main only"; exit 1; }
+            tag="$want"
+          else
+            tag="$GITHUB_REF_NAME"
+            [[ "$tag" == "$want" ]] || { echo "Tag $tag does not match metadata version-name ($want)"; exit 1; }
+          fi
           files=(dist/dock-install.sh dist/*.deb dist/SHA256SUMS)
           # Release drafted in the GitHub UI already exists: attach the files to it.
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${files[@]}" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "${files[@]}" --generate-notes
+            # creates the tag on this commit when it does not exist yet (manual run)
+            gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --generate-notes
           fi
