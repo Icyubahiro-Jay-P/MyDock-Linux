@@ -10,8 +10,8 @@
     "50"
   ],
   "settings-schema": "org.gnome.shell.extensions.mydock",
-  "version": 7,
-  "version-name": "1.2.1",
+  "version": 8,
+  "version-name": "1.2.2",
   "url": "https://github.com/Icyubahiro-Jay-P/MyDock-Linux",
   "author": "Irakoze Icyubahiro Jean Pierre (@Icyubahiro-Jay-P)"
 }
