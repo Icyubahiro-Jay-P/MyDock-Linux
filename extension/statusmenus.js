@@ -284,15 +284,20 @@ class WifiItem extends StatusItem {
         // imported here so a system without NetworkManager only loses this item
         const {default: NM} = await import('gi://NM');
         this._NM = NM;
-        const client = await new Promise((resolve, reject) => NM.Client.new_async(null, (_o, res) => {
-            try {
-                resolve(NM.Client.new_finish(res));
-            } catch (e) {
-                reject(e);
-            }
-        }));
+        // the shell's own client (quick settings network indicator, set once it is ready), else ours
+        const shared = Main.panel.statusArea.quickSettings?._network?._client;
+        const client = shared instanceof NM.Client ? shared
+            : await new Promise((resolve, reject) => NM.Client.new_async(null, (_o, res) => {
+                try {
+                    resolve(NM.Client.new_finish(res));
+                } catch (e) {
+                    reject(e);
+                }
+            }));
+        this._ownClient = client !== shared;
         if (this._destroyed) {
-            client.run_dispose();
+            if (this._ownClient)
+                client.run_dispose();
             return;
         }
         this._client = client;
@@ -408,7 +413,8 @@ class WifiItem extends StatusItem {
         this._run(this._apSigs);
         this._run(this._devSigs);
         super.destroy();
-        this._client?.run_dispose(); // our own client: drop its D-Bus objects now
+        if (this._ownClient)
+            this._client?.run_dispose(); // our own client: drop its D-Bus objects now
         this._client = null;
         this._device = null;
     }
@@ -428,7 +434,10 @@ class BluetoothItem extends StatusItem {
         if (this._destroyed)
             return;
         this._ABSENT = GnomeBluetooth.AdapterState.ABSENT;
-        this._client = new GnomeBluetooth.Client();
+        // the shell's own client (quick settings bluetooth indicator's BtClient), else ours
+        const shared = Main.panel.statusArea.quickSettings?._bluetooth?._client?._client;
+        this._ownClient = !(shared instanceof GnomeBluetooth.Client);
+        this._client = this._ownClient ? new GnomeBluetooth.Client() : shared;
         // rfkill is how GNOME switches Bluetooth off; powering the adapter alone can't undo that
         this._rfkill = new RfkillProxy(Gio.DBus.session, 'org.gnome.SettingsDaemon.Rfkill',
             '/org/gnome/SettingsDaemon/Rfkill', () => {});
@@ -497,7 +506,8 @@ class BluetoothItem extends StatusItem {
 
     destroy() {
         super.destroy();
-        this._client?.run_dispose(); // our own instance (not a singleton): drop its D-Bus objects now
+        if (this._ownClient)
+            this._client?.run_dispose(); // our own instance (not a singleton): drop its D-Bus objects now
         this._client = null;
         this._rfkill = null;
     }
@@ -816,7 +826,6 @@ function nowPlaying(drops, compact = false) {
     }
 
     const cancel = new Gio.Cancellable();
-    const players = new Map(); // bus name -> [MprisPlayer, signal ids]
     let playerName = null;
     let pos = null; // {us, t}: position at monotonic time t
     let seekedId = 0;
@@ -848,9 +857,9 @@ function nowPlaying(drops, compact = false) {
             });
     };
     const sync = () => {
-        const all = [...players.values()].map(([p]) => p);
-        const found = all.find(p => p.status === 'Playing') ?? all.find(p => p.status === 'Paused') ?? null;
-        const name = found ? [...players].find(([, [p]]) => p === found)[0] : null;
+        const all = [...mpris.players];
+        const found = all.find(([, p]) => p.status === 'Playing') ?? all.find(([, p]) => p.status === 'Paused');
+        const name = found?.[0] ?? null;
         if (name !== playerName) {
             if (seekedId)
                 Gio.DBus.session.signal_unsubscribe(seekedId);
@@ -862,7 +871,7 @@ function nowPlaying(drops, compact = false) {
             playerName = name;
             pos = null;
         }
-        player = found;
+        player = found?.[1] ?? null;
         col.visible = !!player;
         const playing = player?.status === 'Playing';
         if (playing && !timerId && bar) {
@@ -893,42 +902,74 @@ function nowPlaying(drops, compact = false) {
         if (bar)
             fetchPosition(); // status or track changed: position jumps
     };
-    const add = name => {
-        const p = new MprisPlayer(name);
-        players.set(name, [p, [
-            p.connect('changed', sync),
-            p.connect('closed', () => {
-                players.delete(name);
-                sync();
-            }),
-        ]]);
-    };
-
-    Gio.DBus.session.call('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'ListNames',
-        null, new GLib.VariantType('(as)'), Gio.DBusCallFlags.NONE, -1, cancel, (conn, res) => {
-            try {
-                const [names] = conn.call_finish(res).deepUnpack();
-                names.filter(n => n.startsWith(MPRIS_PREFIX)).forEach(add);
-            } catch {} // cancelled: menu closed meanwhile
-        });
+    const mpris = mprisPlayers();
+    mpris.listeners.add(sync);
+    sync();
 
     drops.push(() => {
         cancel.cancel();
+        mpris.listeners.delete(sync);
         if (seekedId)
             Gio.DBus.session.signal_unsubscribe(seekedId);
         if (timerId)
             GLib.source_remove(timerId);
-        for (const [p, ids] of players.values()) {
-            ids.forEach(id => p.disconnect(id));
-            // MprisPlayer has no destroy(): unhook its proxies so it can be collected
-            p._mprisProxy?.disconnectObject(p);
-            p._playerProxy?.disconnectObject(p);
-        }
-        players.clear();
         player = null;
         playerName = null;
     });
     return col;
+}
+
+// One long-lived set of MPRIS players shared by every nowPlaying widget, built on first use:
+// players come in via NameOwnerChanged and leave on their own 'closed'. Building them per menu
+// open re-created every proxy each time, and proxies that became ready after the menu closed
+// kept their subscriptions. listeners run on any player change. Dropped by dropMprisPlayers().
+let _mpris = null;
+
+function mprisPlayers() {
+    if (_mpris)
+        return _mpris;
+    const m = _mpris = {players: new Map(), listeners: new Set(), cancel: new Gio.Cancellable()};
+    const changed = () => m.listeners.forEach(fn => fn());
+    const add = name => {
+        if (m.players.has(name))
+            return;
+        const p = new MprisPlayer(name);
+        m.players.set(name, p);
+        p.connect('changed', changed);
+        p.connect('closed', () => {
+            m.players.delete(name);
+            changed();
+        });
+    };
+    m.subId = Gio.DBus.session.signal_subscribe('org.freedesktop.DBus', 'org.freedesktop.DBus',
+        'NameOwnerChanged', '/org/freedesktop/DBus', MPRIS_PREFIX.slice(0, -1),
+        Gio.DBusSignalFlags.MATCH_ARG0_NAMESPACE, (_c, _s, _p, _i, _n, params) => {
+            const [name, oldOwner, newOwner] = params.deepUnpack();
+            if (newOwner && !oldOwner)
+                add(name);
+        });
+    Gio.DBus.session.call('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'ListNames',
+        null, new GLib.VariantType('(as)'), Gio.DBusCallFlags.NONE, -1, m.cancel, (conn, res) => {
+            try {
+                const [names] = conn.call_finish(res).deepUnpack();
+                names.filter(n => n.startsWith(MPRIS_PREFIX)).forEach(add);
+            } catch {} // cancelled: dropped meanwhile
+        });
+    return m;
+}
+
+function dropMprisPlayers() {
+    if (!_mpris)
+        return;
+    _mpris.cancel.cancel();
+    Gio.DBus.session.signal_unsubscribe(_mpris.subId);
+    for (const p of _mpris.players.values()) {
+        p.disconnectAll();
+        // MprisPlayer has no destroy(): unhook its proxies so it can be collected
+        p._mprisProxy?.disconnectObject(p);
+        p._playerProxy?.disconnectObject(p);
+    }
+    _mpris = null;
 }
 
 // ---- tray chevron: third-party indicators (AppIndicator / StatusNotifierItem apps such as Spotify,
@@ -1380,6 +1421,7 @@ export class StatusMenus {
             }
         }
         this._parts = [];
+        dropMprisPlayers();
     }
 
     destroy() {
