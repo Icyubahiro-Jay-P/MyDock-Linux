@@ -75,10 +75,12 @@ export class Launchpad {
             x: mon.x, y: mon.y, width: mon.width, height: mon.height,
             opacity: 0,
         });
+        // above the windows, below the panel and the dock; on stage before anything is measured
+        Main.uiGroup.insert_child_above(this._actor, global.window_group);
 
         // blurred, dimmed wallpaper (does not zoom)
         const bg = new St.Widget({width: mon.width, height: mon.height});
-        this._bgManager = new Background.BackgroundManager({container: bg, monitorIndex: mon.index, vignette: false});
+        this._bgManager = new Background.BackgroundManager({container: bg, monitorIndex: mon.index, controlPosition: false, vignette: false});
         bg.add_effect(new Shell.BlurEffect({mode: Shell.BlurMode.ACTOR, radius: 60, brightness: 0.6}));
         this._actor.add_child(bg);
 
@@ -139,13 +141,13 @@ export class Launchpad {
         this._pages = 0;    // forces the first _filter() to build the dots
         this._filter();
 
-        this._actor.connect('button-press-event', (_a, ev) => this._onPress(ev));
+        // captured: a press on a tile must still start a swipe (St.Button would eat it)
+        this._actor.connect('captured-event', (_a, ev) => (ev.type() === Clutter.EventType.BUTTON_PRESS
+            ? this._onPress(ev) : Clutter.EVENT_PROPAGATE));
         this._actor.connect('button-release-event', (_a, ev) => this._onRelease(ev));
         this._actor.connect('scroll-event', (_a, ev) => this._onScroll(ev));
         this._actor.connect('key-press-event', (_a, ev) => this._onKey(ev));
 
-        // above the windows, below the panel and the dock
-        Main.uiGroup.insert_child_above(this._actor, global.window_group);
         this._grab = Main.pushModal(this._actor, {actionMode: Shell.ActionMode.POPUP});
         // GNOME 50 dropped get_seat_state(): its grabs always take the keyboard
         const seat = this._grab.get_seat_state?.() ?? Clutter.GrabState?.KEYBOARD;
@@ -193,7 +195,7 @@ export class Launchpad {
 
     _buildTile(app) {
         const tile = new St.Button({style_class: 'mydock-launchpad-tile', can_focus: true, reactive: true});
-        const box = new St.BoxLayout({vertical: true, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
+        const box = new St.BoxLayout({orientation: Clutter.Orientation.VERTICAL, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER});
         const gicon = this._ext.iconOverride?.(app.get_id());
         const icon = gicon
             ? new St.Icon({gicon, icon_size: this._iconSize})
@@ -208,6 +210,12 @@ export class Launchpad {
             app.activate();
             this.close();
         };
+        // St.Button grabs on press, so the release of a swipe begun here only reaches the tile;
+        // propagate so it still drops its grab, _swiped keeps it from launching
+        tile.connect('button-release-event', (_a, ev) => {
+            this._onRelease(ev);
+            return Clutter.EVENT_PROPAGATE;
+        });
         tile.connect('clicked', () => {
             if (!this._swiped)
                 tile.launch();
