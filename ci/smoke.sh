@@ -76,6 +76,9 @@ dbus-run-session -- bash -c '
     ext DisableExtension >/dev/null; sleep 2
     ext EnableExtension >/dev/null; sleep 3
     ok=0; active && ok=1
+    # only the log up to here is checked: killing the shell finalizes every extension's actors,
+    # and distro extensions (Ubuntu dock, DING) log GC criticals then that are not ours
+    wc -l <"$log" >"$log.lines"
     kill "$shell"; wait "$shell" 2>/dev/null
     [ "$ok" = 1 ] || { echo "Extension is not active after disable and enable"; exit 1; }
     echo "Extension is active after disable and enable"
@@ -95,7 +98,7 @@ GI_TYPELIB_PATH="${shew%/*}" gjs -m "$work/prefs.mjs" "$dest" || { echo "prefs.j
 echo "prefs.js imports"
 
 # Anything the extension (or a shell API it misuses) logs as an error fails the run.
-errors=$(grep -E 'JS ERROR|JS WARNING|Gjs-CRITICAL|had error|MyDock|MY DOCK FINDER' "$log" || true)
+errors=$(head -n "$(cat "$log.lines")" "$log" | grep -E 'JS ERROR|JS WARNING|Gjs-CRITICAL|had error|MyDock|MY DOCK FINDER' || true)
 if [ -n "$errors" ]; then
     echo "--- errors in the gnome-shell log ---"
     echo "$errors"
