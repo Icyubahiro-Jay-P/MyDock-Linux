@@ -143,6 +143,9 @@ export class MinimizeEffects {
         const stage = minimizing ? null : this._stageRect(actor.meta_window);
         if (stage)
             effect = 'stage';
+        // a mesh is up to MAX_STRIPS clones: when several windows go at once (Stage Manager), scale
+        else if ((effect === 'genie' || effect === 'suck') && this._active.size > 0)
+            effect = 'scale';
         if (effect === 'none' || !St.Settings.get().enable_animations ||
             Main.wm._getAnimationWindowType(actor) !== Meta.WindowType.NORMAL) {
             if (minimizing)
@@ -167,7 +170,14 @@ export class MinimizeEffects {
             this._animate(shellwm, actor, minimizing, effect, stage);
         } catch (e) {
             logError(e, 'MyDock: minimize effect failed');
-            this._active.get(actor)?.();
+            const finish = this._active.get(actor);
+            // failed before registering (e.g. a private WM field is gone): still complete once
+            if (finish)
+                finish();
+            else if (minimizing)
+                shellwm.completed_minimize(actor);
+            else
+                shellwm.completed_unminimize(actor);
         }
     }
 
@@ -228,19 +238,17 @@ export class MinimizeEffects {
             });
             global.window_group.insert_child_above(clone, actor);
             actor.opacity = 0;
-            let gone = 0;
+            // tracked like the other effects: a new request, kill-window-effects, the window
+            // closing and destroy() all end the flight
             const done = () => {
-                if (!gone)
-                    return; // window closed mid-flight
+                if (!this._active?.delete(actor))
+                    return;
                 actor.disconnect(gone);
-                gone = 0;
                 clone.destroy();
                 actor.opacity = 255;
             };
-            gone = actor.connect('destroy', () => {
-                gone = 0;
-                clone.destroy();
-            });
+            this._active.set(actor, done);
+            const gone = actor.connect('destroy', done);
             clone.ease({
                 scale_x: 1, scale_y: 1, translation_x: 0, translation_y: 0, opacity: 255,
                 duration: STAGE_MS,
@@ -308,7 +316,7 @@ export class MinimizeEffects {
     _targetRect(actor) {
         const win = actor.meta_window;
         const app = Shell.WindowTracker.get_default().get_window_app(win);
-        const dockRect = app ? this._ext.dock?.getIconRect(app) : null;
+        const dockRect = app ? this._ext.dock?.getIconRect(app, win) : null;
         if (dockRect)
             return {...dockRect, dock: true};
         const [ok, geom] = win.get_icon_geometry();
