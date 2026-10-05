@@ -20,7 +20,7 @@ Then **log out and back in**. Nothing needs sudo. Want to read the script first?
 
 ## Features
 
-- **Dock**: magnification on hover, running-app dots, bounce on launch, app name labels, trash, live calendar and clock icons, blur and opacity, autohide, a dock on every monitor.
+- **Dock**: magnification on hover, running-app dots (hollow when every window is minimized), bounce on launch and when an app needs attention, notification badges and progress bars, scroll on an icon to switch its windows, app name labels, trash, live calendar and clock icons, blur and opacity, autohide, a dock on every monitor.
 - **Finder bar**: restyles the GNOME top panel into a translucent macOS-style menu bar, with a custom clock format and an optional custom logo.
 - **Launchpad**: full-screen app grid, opened from the dock or with **Ctrl+Super+A**.
 - **Stage Manager**: a strip of recent window groups on the side of the screen. Off by default.
@@ -121,6 +121,9 @@ Every setting applies live. Key settings (schema `org.gnome.shell.extensions.myd
 | Dock | `blur` / `opacity` | `15` / `45` | Background blur radius and opacity (%) |
 | Dock | `blur-windows` | `false` | Blur windows behind the Dock live (off: blurred wallpaper with clean corners, fastest) |
 | Dock | `show-trash`, `show-calendar`, `show-clock`, `show-launchpad` | on, on, off, on | Extra dock icons |
+| Dock | `bounce-on-attention` | `true` | Bounce an app's icon when one of its windows needs attention |
+| Dock | `show-badges` | `true` | Red notification count on app icons (apps that use the Unity launcher API) |
+| Dock | `scroll-cycles-windows` | `true` | Scroll on an app icon to switch between its windows |
 | Finder bar | `finderbar-enabled` | `true` | macOS-style top bar |
 | Finder bar | `finderbar-status-menus` | `true` | Wi-Fi, Bluetooth, sound, display, battery, account menus and a Control Center in the Finder bar |
 | Finder bar | `time-format` | `'%a %-d %b  %-I:%M %p'` | Clock format (GLib strftime) |

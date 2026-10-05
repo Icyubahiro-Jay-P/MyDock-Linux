@@ -38,6 +38,8 @@ const HIDE_DELAY = 400; // ms before intellihide re-evaluates after pointer leav
 const CALENDAR_ID = 'org.gnome.Calendar.desktop';
 const CLOCKS_ID = 'org.gnome.clocks.desktop';
 const LAUNCHER_ENTRY = 'com.canonical.Unity.LauncherEntry';
+const ATTENTION_BOUNCES = 10;    // stop bouncing for attention after this many hops
+const SCROLL_GAP_US = 250000;     // one window switch per 250 ms of scrolling (touchpads send many events)
 
 function clockDate() {
     return GLib.DateTime.new_now_local().format('%Y/%-m/%-d %A');
@@ -198,6 +200,7 @@ class DockItem extends St.Button {
 
         const {S, M, P} = bar.geom;
         const slot = new St.Widget({width: S, height: S});
+        this._slot = slot;
         this._icon = iconActor;
         this._icon.reactive = true; // so the magnified part outside the slot is pickable
         this._icon.set_size(M, M);
@@ -224,6 +227,7 @@ class DockItem extends St.Button {
 
         this.connect('clicked', (_b, button) => this._clicked(button));
         this.connect('notify::hover', () => bar.onItemHover(this));
+        this.connect('scroll-event', (_a, ev) => this._onScroll(ev));
 
         if (app && !app.is_window_backed()) {
             this._delegate = this;
@@ -264,6 +268,7 @@ class DockItem extends St.Button {
         this._applied = s;
         const k = this._bar.geom.S / this._bar.geom.M * s;
         this._icon.set_scale(k, k);
+        this._placeBadge();
     }
 
     // DND source interface
@@ -285,18 +290,93 @@ class DockItem extends St.Button {
         this._setProgress(p);
         this._dot.visible = p === null && settings.get_boolean('show-running-dots') &&
             this.app.state !== Shell.AppState.STOPPED;
+        const wins = this.app.get_windows();
+        this._allMinimized = wins.length > 0 && wins.every(w => w.minimized);
         this.setFocused(this.app === this._bar.dock.focusApp);
+        this._setBadge(settings.get_boolean('show-badges') ? this._bar.dock.badgeFor(this.app.get_id()) : null);
         if (this.app.state === Shell.AppState.STARTING && settings.get_boolean('bounce-on-launch'))
             this._bounce();
     }
 
-    // focused app: the running dot becomes a pill as wide as the icon (theme: .mydock-dot-focused)
+    // focused app: the running dot becomes a pill as wide as the icon (theme: .mydock-dot-focused);
+    // every window minimized: a hollow dot (theme: .mydock-dot-minimized)
     setFocused(on) {
         if (on)
             this._dot.add_style_class_name('mydock-dot-focused');
         else
             this._dot.remove_style_class_name('mydock-dot-focused');
+        if (!on && this._allMinimized)
+            this._dot.add_style_class_name('mydock-dot-minimized');
+        else
+            this._dot.remove_style_class_name('mydock-dot-minimized');
         this._dot.width = on ? this._bar.geom.S : -1;   // -1: back to the theme's dot size
+    }
+
+    // Unity LauncherEntry count as a red badge on the icon's top right corner, or null to hide
+    _setBadge(n) {
+        if (n === this._badgeCount)
+            return;
+        this._badgeCount = n;
+        if (n !== null && !this._badge) {
+            this._badge = new St.Label({style_class: 'mydock-badge'});
+            this._slot.add_child(this._badge);
+            // ride along with the bounce
+            this._icon.bind_property('translation-y', this._badge, 'translation-y', GObject.BindingFlags.SYNC_CREATE);
+        }
+        if (!this._badge)
+            return;
+        this._badge.visible = n !== null;
+        if (n !== null) {
+            this._badge.text = n > 99 ? '99+' : String(n);
+            this._placeBadge();
+        }
+    }
+
+    // follows the icon as it magnifies: the icon is pivoted at its bottom center
+    _placeBadge() {
+        if (!this._badge?.visible)
+            return;
+        const {S, M} = this._bar.geom;
+        const size = M * this._icon.scale_x;
+        const [, w] = this._badge.get_preferred_width(-1);
+        const [, h] = this._badge.get_preferred_height(-1);
+        this._badge.set_position(Math.round(S / 2 + size / 2 - w * 0.7), Math.round(S - size - h * 0.3));
+    }
+
+    // Scroll on a running app's icon: switch between its windows in a fixed order.
+    _onScroll(ev) {
+        if (!this.app || !this._bar.dock.ext.settings.get_boolean('scroll-cycles-windows'))
+            return Clutter.EVENT_PROPAGATE;
+        let dir = ev.get_scroll_direction();
+        if (dir === Clutter.ScrollDirection.SMOOTH) {
+            const [, dy] = ev.get_scroll_delta();
+            if (dy === 0)
+                return Clutter.EVENT_STOP;
+            dir = dy > 0 ? Clutter.ScrollDirection.DOWN : Clutter.ScrollDirection.UP;
+        }
+        if (dir !== Clutter.ScrollDirection.UP && dir !== Clutter.ScrollDirection.DOWN)
+            return Clutter.EVENT_PROPAGATE;
+        const now = GLib.get_monotonic_time();
+        if (now - (this._lastScroll ?? 0) < SCROLL_GAP_US)
+            return Clutter.EVENT_STOP;
+        this._lastScroll = now;
+        // stable order, not most-recently-used: MRU would just flip between two windows
+        const wins = this.app.get_windows().filter(w => !w.skip_taskbar)
+            .sort((a, b) => a.get_stable_sequence() - b.get_stable_sequence());
+        if (!wins.length)
+            return Clutter.EVENT_STOP;
+        const cur = wins.indexOf(global.display.focus_window);
+        const step = dir === Clutter.ScrollDirection.DOWN ? 1 : -1;
+        const next = cur < 0 ? 0 : (cur + step + wins.length) % wins.length;
+        this._bar.hideLabel();
+        Main.activateWindow(wins[next]);
+        return Clutter.EVENT_STOP;
+    }
+
+    // a window of this app asked for attention: hop until it is focused or stops asking
+    bounceForAttention(win) {
+        let left = ATTENTION_BOUNCES;
+        this._bounce(() => left-- > 0 && !win.has_focus() && (win.demands_attention || win.urgent));
     }
 
     // p in 0..1, or null to hide the track
@@ -324,7 +404,7 @@ class DockItem extends St.Button {
             this._fill.width = Math.round(this._trackW * Math.min(1, Math.max(0, p)));
     }
 
-    _bounce() {
+    _bounce(keepGoing = () => this.app.state === Shell.AppState.STARTING) {
         if (this._bouncing)
             return;
         this._bouncing = true;
@@ -340,7 +420,7 @@ class DockItem extends St.Button {
                 this._icon.translation_y = 0;
         };
         const step = () => {
-            if (!this._bouncing || this.app.state !== Shell.AppState.STARTING) {
+            if (!this._bouncing || !keepGoing()) {
                 reset();
                 return;
             }
@@ -1271,6 +1351,13 @@ export class Dock {
         global.display.connectObject(
             'notify::focus-window', () => this._trackFocus(),
             'window-created', () => this._queueIconGeometry(),
+            'window-demands-attention', (_d, win) => this._onAttention(win),
+            'window-marked-urgent', (_d, win) => this._onAttention(win),
+            this);
+        // hollow dot when all of an app's windows are minimized
+        global.window_manager.connectObject(
+            'minimize', (_wm, actor) => this._syncWindowApp(actor.meta_window),
+            'unminimize', (_wm, actor) => this._syncWindowApp(actor.meta_window),
             this);
         global.workspace_manager.connectObject('active-workspace-changed', () => this.queueHideCheck(), this);
         Main.overview.connectObject(
@@ -1284,7 +1371,7 @@ export class Dock {
                 this._rebuild();
             else if (key === 'blur' || key === 'opacity' || key === 'blur-windows')
                 this._bars.forEach(b => b.restyle());
-            else if (key === 'bounce-on-launch' || key === 'show-labels' || key === 'dock-separators')
+            else if (['bounce-on-launch', 'show-labels', 'dock-separators', 'show-badges'].includes(key))
                 this._refresh();
         }, this);
 
@@ -1301,7 +1388,7 @@ export class Dock {
         DND.addDragMonitor(this._dragMonitor);
 
         // Unity launcher API progress bars: one subscription for all bars
-        this._progress = new Map(); // app id -> {progress, visible}
+        this._progress = new Map(); // app id -> {progress, visible, count, countVisible}
         this._progressSub = Gio.DBus.session.signal_subscribe(null, LAUNCHER_ENTRY, 'Update', null, null,
             Gio.DBusSignalFlags.NONE, (_c, _s, _p, _i, _sig, params) => this._onLauncherEntry(params));
 
@@ -1332,11 +1419,15 @@ export class Dock {
         // only running apps: their state is dropped again when they stop
         if ((this._appSystem.lookup_app(id)?.state ?? Shell.AppState.STOPPED) === Shell.AppState.STOPPED)
             return;
-        const state = this._progress.get(id) ?? {progress: 0, visible: false};
+        const state = this._progress.get(id) ?? {progress: 0, visible: false, count: 0, countVisible: false};
         if (typeof props.progress === 'number')
             state.progress = props.progress;
         if (typeof props['progress-visible'] === 'boolean')
             state.visible = props['progress-visible'];
+        if (typeof props.count === 'number')
+            state.count = props.count;
+        if (typeof props['count-visible'] === 'boolean')
+            state.countVisible = props['count-visible'];
         this._progress.set(id, state);
         for (const b of this._bars)
             b.syncId(id);
@@ -1346,6 +1437,26 @@ export class Dock {
     progressFor(id) {
         const st = this._progress.get(id);
         return st?.visible ? st.progress : null;
+    }
+
+    // notification count for the app's badge, or null
+    badgeFor(id) {
+        const st = this._progress.get(id);
+        return st?.countVisible && st.count > 0 ? st.count : null;
+    }
+
+    _onAttention(win) {
+        if (!this.ext.settings.get_boolean('bounce-on-attention') || win.has_focus())
+            return;
+        const app = Shell.WindowTracker.get_default().get_window_app(win);
+        if (app)
+            this._bars.forEach(b => b.itemFor(app)?.bounceForAttention(win));
+    }
+
+    _syncWindowApp(win) {
+        const app = win && Shell.WindowTracker.get_default().get_window_app(win);
+        if (app)
+            this._bars.forEach(b => b.syncApp(app));
     }
 
     _onAppState(app) {
@@ -1531,7 +1642,7 @@ export class Dock {
         Gio.DBus.session.signal_unsubscribe(this._progressSub);
         this._progress.clear();
         for (const obj of [this._favs, this._appSystem, Main.layoutManager, global.display,
-            global.workspace_manager, Main.overview, this.ext.settings, this._focusWin])
+            global.window_manager, global.workspace_manager, Main.overview, this.ext.settings, this._focusWin])
             obj?.disconnectObject(this);
         this._focusWin = null;
         if (this._hideId)
