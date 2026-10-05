@@ -15,6 +15,7 @@ trap 'rm -rf "$work"' EXIT
 export HOME="$work/home" XDG_CONFIG_HOME="$work/home/.config" XDG_DATA_HOME="$work/home/.local/share"
 export XDG_RUNTIME_DIR="$work/run" XDG_CACHE_HOME="$work/home/.cache"
 mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+mkdir -p "$HOME/Desktop"  # Ubuntu's desktop-icons extension logs a JS error without it
 dest="$XDG_DATA_HOME/gnome-shell/extensions/$UUID"
 mkdir -p "$dest"
 tar cf - -C extension --exclude='*.test.mjs' --exclude=gschemas.compiled . | tar xf - -C "$dest"
@@ -61,6 +62,16 @@ dbus-run-session -- bash -c '
         gs set "$schema" "$key" "$old"; sleep 0.5
     done
 
+    # every enum setting through each of its values, then back
+    for key in $(gs list-keys "$schema"); do
+        set -- $(gs range "$schema" "$key")
+        [ "$1" = enum ] || continue
+        shift
+        old=$(gs get "$schema" "$key")
+        for v in "$@"; do gs set "$schema" "$key" "$v"; sleep 0.5; done
+        gs set "$schema" "$key" "$old"; sleep 0.5
+    done
+
     # full disable and enable: every destroy() runs, then every constructor again
     ext DisableExtension >/dev/null; sleep 2
     ext EnableExtension >/dev/null; sleep 3
@@ -69,6 +80,19 @@ dbus-run-session -- bash -c '
     [ "$ok" = 1 ] || { echo "Extension is not active after disable and enable"; exit 1; }
     echo "Extension is active after disable and enable"
 ' smoke "$UUID" "$SCHEMA" "$dest" "$log" "$WAIT" || { echo "--- gnome-shell log ---"; cat "$log"; exit 1; }
+
+# prefs.js runs in the Extensions app, not the shell: import it under gjs so a syntax or import
+# error fails here too. It needs the app's resource bundle and gnome-shell's private typelibs.
+shew=$(find /usr/lib /usr/lib64 -name Shew-0.typelib -path '*gnome-shell*' -print -quit 2>/dev/null || true)
+cat > "$work/prefs.mjs" <<'JS'
+import Gio from 'gi://Gio';
+Gio.Resource.load('/usr/share/gnome-shell/org.gnome.Shell.Extensions.src.gresource')._register();
+const prefs = await import(`file://${ARGV[0]}/prefs.js`);
+if (typeof prefs.default !== 'function')
+    throw new Error('prefs.js has no default export');
+JS
+GI_TYPELIB_PATH="${shew%/*}" gjs -m "$work/prefs.mjs" "$dest" || { echo "prefs.js failed to import"; exit 1; }
+echo "prefs.js imports"
 
 # Anything the extension (or a shell API it misuses) logs as an error fails the run.
 errors=$(grep -E 'JS ERROR|JS WARNING|Gjs-CRITICAL|had error|MyDock|MY DOCK FINDER' "$log" || true)
