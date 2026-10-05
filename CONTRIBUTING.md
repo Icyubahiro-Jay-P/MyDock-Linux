@@ -119,11 +119,13 @@ New settings go in `extension/schemas/org.gnome.shell.extensions.mydock.gschema.
 ## Releasing (maintainers)
 
 1. Bump `"version-name"` (for example `"1.1.0"`) and `"version"` (integer, +1) in `extension/metadata.json`. When adding support for a new GNOME version, also add it to `"shell-version"` and raise the upper bound in `install-stub.sh` (`MAX_SHELL`) and the `.deb` Depends in `build.sh`.
-2. Commit, then tag and push the tag:
+2. Merge it to `main`, then either:
+   - **From any browser or the GitHub app:** Actions > build > Run workflow on `main`. It creates the `v<version-name>` tag and release itself.
+   - **From a terminal:** tag and push the tag:
 
-   ```bash
-   git tag v1.1.0
-   git push origin v1.1.0
-   ```
+     ```bash
+     git tag v1.1.0
+     git push origin v1.1.0
+     ```
 
 3. CI builds and publishes a GitHub Release with `dock-install.sh` and `dock_<version>_all.deb` and `SHA256SUMS` attached. The one-liner picks up the new release automatically.
