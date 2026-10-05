@@ -1206,13 +1206,12 @@ class DockBar {
         // position in the favorites list once the app itself is removed from it
         const pos = pinned.slice(0, index).filter(k => k.app.get_id() !== id).length;
         this.clearDropGap();
-        global.compositor.get_laters().add(Meta.LaterType.BEFORE_REDRAW, () => {
+        this.dock.later(() => {
             const favs = AppFavorites.getAppFavorites();
             if (favs.isFavorite(id))
                 favs.moveFavoriteToPos(id, pos);
             else
                 favs.addFavoriteAtPos(id, pos);
-            return GLib.SOURCE_REMOVE;
         });
         return true;
     }
@@ -1346,6 +1345,7 @@ export class Dock {
         this._bars = [];
         this._runningOrder = [];
         this._dragging = false;
+        this._laters = new Set();
         this._favs = AppFavorites.getAppFavorites();
         this._appSystem = Shell.AppSystem.get_default();
 
@@ -1554,10 +1554,18 @@ export class Dock {
             return;
         }
         const id = item.app.get_id();
-        global.compositor.get_laters().add(Meta.LaterType.BEFORE_REDRAW, () => {
-            this._favs.removeFavorite(id);
+        this.later(() => this._favs.removeFavorite(id));
+    }
+
+    // fn before the next redraw, cancelled by destroy()
+    later(fn) {
+        const laters = global.compositor.get_laters();
+        const id = laters.add(Meta.LaterType.BEFORE_REDRAW, () => {
+            this._laters.delete(id);
+            fn();
             return GLib.SOURCE_REMOVE;
         });
+        this._laters.add(id);
     }
 
     // A dock drag grabs the pointer, so the box loses hover: keep an auto-hidden dock up meanwhile.
@@ -1570,10 +1578,9 @@ export class Dock {
     // Separator edits run before the next redraw: they rebuild the bars, which may destroy
     // the separator a running drag still references.
     _editSeparators(fn) {
-        global.compositor.get_laters().add(Meta.LaterType.BEFORE_REDRAW, () => {
+        this.later(() => {
             const s = this.ext.settings;
             s.set_strv('dock-separators', [...new Set(fn(s.get_strv('dock-separators')))]);
-            return GLib.SOURCE_REMOVE;
         });
     }
 
@@ -1649,11 +1656,16 @@ export class Dock {
             global.window_manager, global.workspace_manager, Main.overview, this.ext.settings, this._focusWin])
             obj?.disconnectObject(this);
         this._focusWin = null;
+        this._bars.forEach(b => b.destroy());
+        this._bars = [];
+        // after the bars: destroying them can still queue a hide check
         if (this._hideId)
             GLib.source_remove(this._hideId);
         if (this._geomId)
             GLib.source_remove(this._geomId);
-        this._bars.forEach(b => b.destroy());
-        this._bars = [];
+        this._hideId = this._geomId = 0;
+        const laters = global.compositor.get_laters();
+        this._laters.forEach(id => laters.remove(id));
+        this._laters.clear();
     }
 }
