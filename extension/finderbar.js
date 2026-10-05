@@ -53,16 +53,24 @@ function readText(path) {
 }
 
 // newest RECENT_MAX local files in the GTK recent list that still exist, as [uri, name], passed
-// to done(). The checks are async so a file on a hung network mount can't freeze the shell.
+// to done(). The list read and the checks are async so a large list or a file on a hung network
+// mount can't freeze the shell.
 // ponytail: only the newest RECENT_MAX * 3 are checked, so many deleted ones can shorten the list
 function recentFiles(done) {
-    const bf = new GLib.BookmarkFile();
-    try {
-        bf.load_from_file(GLib.build_filenamev([GLib.get_user_data_dir(), 'recently-used.xbel']));
-    } catch {
-        done([]);
-        return;
-    }
+    const xbel = GLib.build_filenamev([GLib.get_user_data_dir(), 'recently-used.xbel']);
+    Gio.File.new_for_path(xbel).load_contents_async(null, (f, res) => {
+        const bf = new GLib.BookmarkFile();
+        try {
+            bf.load_from_data(f.load_contents_finish(res)[1]);
+        } catch {
+            done([]);
+            return;
+        }
+        checkRecent(bf, done);
+    });
+}
+
+function checkRecent(bf, done) {
     const uris = bf.get_uris().filter(u => u.startsWith('file://'))
         .map(u => [u, bf.get_modified_date_time(u)?.to_unix() ?? 0]).sort((a, b) => b[1] - a[1])
         .slice(0, RECENT_MAX * 3);
@@ -428,7 +436,7 @@ export class FinderBar {
             if (this._wallClock.force_seconds !== secs)
                 this._wallClock.force_seconds = secs;
         }
-        const now = GLib.DateTime.new_now_local();
+        const now = GLib.DateTime.new_now(this._wallClock.timezone);
         // invalid format returns null: fall back to the shell's own clock text
         const text = now.format(format) || this._clockDisplay.text;
         if (force || text !== this._clockLabel.text)
@@ -519,9 +527,11 @@ export class FinderBar {
     }
 
     _updateStats() {
-        // read only stats on screen (not when locked, fullscreen, panel hidden); a stat not read
-        // drops its previous sample so a stale delta is never used later
-        const shown = key => !!this._statBtn[key]?.mapped;
+        // read only stats on screen (not when locked, fullscreen, panel hidden or slid off by the
+        // menu bar autohide); a stat not read drops its previous sample so a stale delta is never
+        // used later
+        const onScreen = Main.layoutManager.panelBox.translation_y === 0;
+        const shown = key => onScreen && !!this._statBtn[key]?.mapped;
         if (shown('cpu')) {
             const cpu = parseCpuStat(readText('/proc/stat'));
             if (cpu && this._prevCpu)
@@ -531,9 +541,11 @@ export class FinderBar {
             this._prevCpu = null;
         }
 
-        // async: an ACPI thermal zone read can block for a long time
-        if (shown('temp')) {
+        // async: an ACPI thermal zone read can block for a long time; one read at a time
+        if (shown('temp') && !this._tempBusy) {
+            this._tempBusy = true;
             Gio.File.new_for_path(this._tempFile).load_contents_async(null, (f, res) => {
+                this._tempBusy = false;
                 if (!this._stat?.temp)
                     return; // temp stat turned off / destroyed meanwhile
                 let temp = NaN;
@@ -556,9 +568,11 @@ export class FinderBar {
 
         // disk usage changes slowly: every 15th tick (~30 s); async so a slow statfs never
         // stalls the compositor
-        if (shown('disk') && this._statTick++ % 15 === 0) {
+        if (shown('disk') && this._statTick++ % 15 === 0 && !this._diskBusy) {
+            this._diskBusy = true;
             Gio.File.new_for_path('/').query_filesystem_info_async('filesystem::size,filesystem::free',
                 GLib.PRIORITY_LOW, null, (f, res) => {
+                    this._diskBusy = false;
                     if (!this._stat?.disk)
                         return; // disk stat turned off / destroyed meanwhile
                     try {
