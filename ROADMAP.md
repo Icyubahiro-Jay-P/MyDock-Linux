@@ -4,7 +4,7 @@ This is an audit of MY DOCK FINDER FOR LINUX against the real macOS Dock, menu b
 behaviour, with a plan for building each missing piece. Items are grouped by module and then put in
 the order they should be built.
 
-Legend: **Done** is shipped, **Planned** is not built yet.
+Legend: **Done** is shipped, **Planned** is not built yet, **Not possible** cannot be done from a GNOME Shell extension.
 
 Every item follows the pattern in [CONTRIBUTING.md](CONTRIBUTING.md): a key in
 `extension/schemas/org.gnome.shell.extensions.mydock.gschema.xml`, a row in the `PAGES` table in
@@ -31,13 +31,13 @@ clock, drag to reorder, autohide, a dock on every monitor, right-click app menu.
 | --- | --- | --- |
 | Planned | Automatic separator between pinned apps and other running apps (user separators you add from the menu are done, `dock-separators`) | Thin `St.Widget` between the two groups in `setApps()` |
 | Planned | "Show suggested and recent apps in Dock" | Keep the last 3 closed unpinned apps in a key, show them after the separator |
-| Planned | Bounce when an app needs attention | Watch `demands-attention` / `urgent` on windows, reuse `_bounce()` |
-| Done | Progress bars (`com.canonical.Unity.LauncherEntry`), badges still planned | Listen to the `com.canonical.Unity.LauncherEntry` DBus signal (used by Chrome, Telegram, Thunderbird, Nautilus) |
-| Planned | Click on the focused app to minimize, scroll to cycle windows | `click-action` enum: none, minimize, cycle, preview |
-| Planned | Middle click opens a new window, Ctrl click hides other apps | Extend `_clicked()` |
+| Done | Bounce when an app needs attention | `window-demands-attention` / `window-marked-urgent`, up to 10 hops or until the window is focused (`bounce-on-attention`) |
+| Done | Progress bars and notification badges | `com.canonical.Unity.LauncherEntry` `progress` and `count` (Chrome, Telegram, Thunderbird, Nautilus), badges behind `show-badges` |
+| Done | Click on the focused app to minimize, scroll to cycle windows | Click already minimized; scroll switches windows in a fixed order (`scroll-cycles-windows`) |
+| Planned | Ctrl click hides other apps (middle click for a new window is done) | Extend `_activateApp()` |
 | Planned | Drag an icon out of the Dock to remove it, with a puff | In the drag-end handler, unpin when dropped outside the dock |
-| Planned | Drop files on an app to open them, on Trash to delete | `acceptDrop()` on `DockItem` for URI lists |
-| Planned | Hollow dot for apps whose windows are all minimized | Extra style class on the dot |
+| Not possible | Drop files on an app to open them, on Trash to delete | GNOME Shell does not receive the file list when files are dragged from an app over the shell, so an extension cannot do this |
+| Done | Hollow dot for apps whose windows are all minimized | `.mydock-dot-minimized` in the theme |
 | Planned | Stacks: Downloads, Documents, Applications | Folder tiles with Fan, Grid and List popups, `Gio.File.enumerate_children_async` |
 | Planned | Mounted drives and an Eject action | `Gio.VolumeMonitor`, eject from the tile menu |
 | Planned | Minimize windows into the app icon or into their own tile | `minimize-into-app` key; own tiles go in the right section next to Trash |

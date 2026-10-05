@@ -43,6 +43,7 @@ const PAGES = [
     ]],
     ['Advanced', 'emblem-system-symbolic', 'grey', [
         ['', ['autohide', 'multi-monitor', 'show-labels', 'show-running-dots', 'bounce-on-launch',
+            'bounce-on-attention', 'show-badges', 'scroll-cycles-windows',
             'show-trash', 'show-calendar', 'show-clock']],
     ]],
     ['Minimize Effects', 'focus-windows-symbolic', 'blue', [
@@ -76,6 +77,9 @@ const TITLES = {
     'max-size': 'Icon magnification',
     'icon-space': 'Distance between icons',
     'bounce-on-launch': 'Animate opening applications',
+    'bounce-on-attention': 'Bounce apps that need attention',
+    'show-badges': 'Show notification badges on app icons',
+    'scroll-cycles-windows': 'Scroll on an app icon to switch its windows',
     'show-labels': 'Show app names on hover',
     'show-running-dots': 'Show indicators for open applications',
     'blur': 'Background blur intensity',

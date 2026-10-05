@@ -22,6 +22,9 @@
     <key name="bounce-on-launch" type="b"><default>true</default><summary>Bounce icon while app starts</summary></key>
     <key name="show-labels" type="b"><default>true</default><summary>Show app name tooltip on hover</summary></key>
     <key name="show-running-dots" type="b"><default>true</default><summary>Dot under running apps</summary></key>
+    <key name="bounce-on-attention" type="b"><default>true</default><summary>Bounce icon when an app needs attention</summary></key>
+    <key name="show-badges" type="b"><default>true</default><summary>Notification count badges on icons</summary></key>
+    <key name="scroll-cycles-windows" type="b"><default>true</default><summary>Scroll on an icon to switch between its windows</summary></key>
     <key name="show-launchpad" type="b"><default>true</default><summary>Launchpad icon in dock</summary></key>
     <key name="show-trash" type="b"><default>true</default><summary>Trash icon in dock</summary></key>
     <key name="show-calendar" type="b"><default>true</default><summary>Live calendar icon in dock</summary></key>

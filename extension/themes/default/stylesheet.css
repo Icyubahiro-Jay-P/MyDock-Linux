@@ -53,6 +53,29 @@
   background-color: transparent;
   border: 1px solid rgba(255, 255, 255, 0.67);
 }
+/* every window of the app is minimized: a hollow dot */
+.mydock-dot.mydock-dot-minimized {
+  width: 2px;
+  height: 2px;
+  background-color: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.6);
+}
+.mydock-dark .mydock-dot.mydock-dot-minimized {
+  background-color: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+}
+
+/* notification count (Unity LauncherEntry), top right of the icon */
+.mydock-badge {
+  min-width: 10px;
+  padding: 1px 4px;
+  border-radius: 9px;
+  background-color: #ff3b30;
+  color: #ffffff;
+  font-size: 8pt;
+  font-weight: bold;
+  text-align: center;
+}
 
 .mydock-separator {
   width: 1px;
