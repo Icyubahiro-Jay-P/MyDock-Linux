@@ -30,6 +30,17 @@ function readText(path) {
     }
 }
 
+// whole file as text, or null; async so a slow sysfs / ACPI read never stalls the compositor
+function readTextAsync(path) {
+    return new Promise(resolve => Gio.File.new_for_path(path).load_contents_async(null, (f, res) => {
+        try {
+            resolve(new TextDecoder().decode(f.load_contents_finish(res)[1]));
+        } catch {
+            resolve(null);
+        }
+    }));
+}
+
 function infoRow(box, key, value) {
     const row = new St.BoxLayout({style_class: 'mydock-about-row', x_align: Clutter.ActorAlign.CENTER});
     row.add_child(new St.Label({text: key, style_class: 'mydock-about-key'}));
@@ -125,23 +136,20 @@ export function closeAboutPC() {
     _about?.close();
 }
 
-// one sensor row per temp*_input in tempFile's hwmon dir, or a single "CPU" row for a thermal zone
-function readSensors(tempFile) {
+// [label, temp*_input path] per sensor in tempFile's hwmon dir, or a single "CPU" thermal zone
+function listSensors(tempFile) {
     if (!tempFile)
         return [];
+    const list = [];
     if (tempFile.includes('/hwmon')) {
         const dir = GLib.path_get_dirname(tempFile);
-        const entries = [];
         for (let i = 1; i <= 64; i++) {
-            const input = readText(`${dir}/temp${i}_input`);
-            if (input !== null)
-                entries.push([readText(`${dir}/temp${i}_label`), input]);
+            const input = `${dir}/temp${i}_input`;
+            if (GLib.file_test(input, GLib.FileTest.EXISTS))
+                list.push([readText(`${dir}/temp${i}_label`), input]);
         }
-        const rows = parseSensors(entries);
-        if (rows.length)
-            return rows;
     }
-    return parseSensors([['CPU', readText(tempFile)]]);
+    return list.length ? list : [['CPU', tempFile]];
 }
 
 // Like the reference: two faint dashed grid lines (top and a quarter down), then blue bars with
@@ -206,9 +214,24 @@ function cpuSampler() {
     };
 }
 
+// the chart is CPU usage (the card is "CPU", as before the stat popups), the rows temperatures.
+// Sensors are listed once; their values are read async (an ACPI thermal zone read can block for a
+// long time), one read at a time, and each call returns the last result
 function tempSampler(tempFile) {
     const cpu = cpuSampler();
-    return () => ({value: cpu().value, rows: readSensors(tempFile)});
+    const sensors = listSensors(tempFile);
+    let rows = [], busy = false;
+    return () => {
+        if (!busy) {
+            busy = true;
+            Promise.all(sensors.map(([label, path]) => readTextAsync(path).then(t => [label, t])))
+                .then(entries => {
+                    busy = false;
+                    rows = parseSensors(entries);
+                });
+        }
+        return {value: cpu().value, rows};
+    };
 }
 
 function memSampler() {
@@ -228,10 +251,14 @@ function memSampler() {
 
 // statfs is async so a slow disk never stalls the compositor: each call returns the last result
 function diskSampler() {
-    let last = null;
+    let last = null, busy = false;
     return () => {
+        if (busy)
+            return last;
+        busy = true;
         Gio.File.new_for_path('/').query_filesystem_info_async('filesystem::size,filesystem::free',
             GLib.PRIORITY_LOW, null, (f, res) => {
+                busy = false;
                 try {
                     const info = f.query_filesystem_info_finish(res);
                     const size = info.get_attribute_uint64('filesystem::size');
@@ -304,13 +331,21 @@ export function attachStatPopup(menu, key, tempFile) {
         chart.queue_repaint();
         if (!s)
             return;
-        rows.destroy_all_children();
-        for (const [name, value] of s.rows) {
-            const row = new St.BoxLayout({style_class: 'mydock-temp-row'});
-            row.add_child(new St.Label({text: name, x_expand: true}));
-            row.add_child(new St.Label({text: value}));
-            rows.add_child(row);
+        // rows are rebuilt only when their number changes, else just relabelled
+        if (rows.get_n_children() !== s.rows.length) {
+            rows.destroy_all_children();
+            for (let i = 0; i < s.rows.length; i++) {
+                const row = new St.BoxLayout({style_class: 'mydock-temp-row'});
+                row.add_child(new St.Label({x_expand: true}));
+                row.add_child(new St.Label());
+                rows.add_child(row);
+            }
         }
+        rows.get_children().forEach((row, i) => {
+            const [name, value] = row.get_children();
+            name.text = s.rows[i][0];
+            value.text = s.rows[i][1];
+        });
     };
     const stop = () => {
         if (timerId)
@@ -321,10 +356,16 @@ export function attachStatPopup(menu, key, tempFile) {
         stop();
         if (!open || !alive)
             return;
-        sample();
-        timerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
+        // a throwaway sample re-seeds the deltas (CPU, network) and starts the async reads, so the
+        // first value shown covers the last moment, not all the time the menu was closed
+        sampler();
+        timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 250, () => {
             sample();
-            return GLib.SOURCE_CONTINUE;
+            timerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
+                sample();
+                return GLib.SOURCE_CONTINUE;
+            });
+            return GLib.SOURCE_REMOVE;
         });
     });
     // the menu may destroy the item before our handle is destroyed
