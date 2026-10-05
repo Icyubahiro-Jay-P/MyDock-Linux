@@ -1,8 +1,9 @@
-// Pure text parsers for aboutpc.js. No gi imports, so node can test them (aboutpc.test.mjs).
+// Pure text parsers for aboutpc.js. No gi imports, so node can test them (sysinfo.test.mjs).
 
-// /proc/stat first line: user nice system idle iowait irq softirq steal ...
+// /proc/stat first line: user nice system idle iowait irq softirq steal guest guest_nice;
+// guest time is already counted in user / nice, so only the first 8 are summed
 export function parseCpuStat(text) {
-    const f = text?.split('\n')[0].trim().split(/\s+/).slice(1).map(Number);
+    const f = text?.split('\n')[0].trim().split(/\s+/).slice(1, 9).map(Number);
     if (!f?.length || f.some(Number.isNaN))
         return null;
     return {total: f.reduce((a, b) => a + b, 0), idle: f[3] + (f[4] ?? 0)};
@@ -77,13 +78,15 @@ export function parseMemInfo(text) {
     return total ? {total, avail: kb('MemAvailable'), swapTotal: kb('SwapTotal'), swapFree: kb('SwapFree')} : null;
 }
 
-// /proc/net/dev -> summed rx/tx bytes of every interface but loopback
-export function parseNetDev(text) {
+// /proc/net/dev -> summed rx/tx bytes of every interface but loopback; keep(name), when given,
+// picks the ones to count (callers pass the physical ones, so bridges / veth / VPN traffic
+// isn't counted twice)
+export function parseNetDev(text, keep = null) {
     const lines = text?.split('\n').slice(2) ?? [];
     let rx = 0, tx = 0;
     for (const line of lines) {
         const [name, data] = line.split(':');
-        if (!data || name.trim() === 'lo')
+        if (!data || name.trim() === 'lo' || (keep && !keep(name.trim())))
             continue;
         const f = data.trim().split(/\s+/).map(Number);
         rx += f[0];
