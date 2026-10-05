@@ -109,11 +109,16 @@ class DockBlur {
     }
 
     _buildLive() {
-        const {_bg: bg, _tint: tint} = this._bar;
-        this._band = new St.Widget({x_expand: true, y_expand: true}); // the BinLayout fills it
+        const bar = this._bar;
+        // a fixed size band (see _syncLive) inside a clip that follows the background: resizing
+        // the blurred actor itself every magnify frame made the effect reallocate its textures
+        this._band = new St.Widget();
         this._effect = new Shell.BlurEffect({mode: Shell.BlurMode.BACKGROUND, brightness: 1.0});
         this._band.add_effect(this._effect);
-        bg.insert_child_below(this._band, tint);
+        this._wrap = new St.Widget();
+        this._wrap.add_child(this._band);
+        bar.actor.insert_child_at_index(this._wrap, 0);
+        bar._bg.connectObject('notify::allocation', () => this.sync(), this);
     }
 
     _buildWallpaper() {
@@ -138,20 +143,25 @@ class DockBlur {
         bar._bg.connectObject('notify::allocation', () => this.sync(), this);
     }
 
-    // wallpaper mode: line the wallpaper up with the screen and the mask with the background.
+    // wallpaper mode: line the wallpaper up with the screen and the mask with the background;
+    // live mode: clip the band to the background.
     // Runs after the background is allocated and whenever the bar's translation changes.
     sync() {
-        if (this._mode !== 'wallpaper')
+        if (!this._mode)
             return;
         const bar = this._bar, mon = bar.monitor, actor = bar.actor;
         const ty = actor.translation_y;
         const box = bar._bg.get_allocation_box();
         const w = box.get_width(), h = box.get_height();
         const r = Math.min(bar._radius ?? 0, w / 2, h / 2);
-        const key = `${actor.x},${actor.y},${ty},${box.x1},${box.y1},${w},${h},${r}`;
-        if (key === this._key)
+        const key = [actor.x, actor.y, ty, box.x1, box.y1, w, h, r, bar.box.width];
+        if (this._key?.every((v, i) => v === key[i]))
             return;
         this._key = key;
+        if (this._mode === 'live') {
+            this._syncLive(box, w, h);
+            return;
+        }
         // wrap origin = monitor origin whatever the bar's position or slide
         this._wrap.set_position(mon.x - actor.x, mon.y - actor.y - ty);
         // strip = the bar's full row, a constant size: the background stays inside it
@@ -161,13 +171,28 @@ class DockBlur {
         this._mask.setShape(mon.width, mon.height, actor.x - mon.x + box.x1, stripY + box.y1, w, h, r);
     }
 
+    // the band is as wide as the background ever gets (magnified icons plus a drop gap, or the
+    // hidden pill), so it is only resized when the box changes width
+    _syncLive(box, w, h) {
+        const bar = this._bar, actor = bar.actor, {S, M, sp} = bar.geom;
+        const bandW = Math.ceil(Math.max(w, bar.box.width + 3 * (M - S) + S + sp,
+            Math.min(PILL_W, bar.monitor.width * 0.6)));
+        if (bandW !== this._bandW || actor.height !== this._bandH) {
+            this._bandW = bandW;
+            this._bandH = actor.height;
+            this._band.set_size(bandW, actor.height);
+            // fixed position in the BinLayout: centered like the background
+            this._wrap.set_position(Math.round((actor.width - bandW) / 2), 0);
+        }
+        this._wrap.set_clip(box.x1 - this._wrap.x, box.y1 - this._wrap.y, w, h);
+    }
+
     _teardown() {
         this._bar._bg.disconnectObject(this);
         this._bgManager?.destroy();
-        this._wrap?.destroy();
-        this._band?.destroy();
+        this._wrap?.destroy(); // takes the live band with it
         this._bgManager = this._wrap = this._inner = this._mask = this._band = this._effect = null;
-        this._mode = null;
+        this._mode = this._bandW = this._bandH = null;
     }
 
     destroy() {
@@ -323,7 +348,7 @@ class DockItem extends St.Button {
             // sizes are only valid on stage: (re)place once it is shown
             this._badge.connect('notify::mapped', () => this._placeBadge());
             // ride along with the bounce
-            this._icon.bind_property('translation-y', this._badge, 'translation-y', GObject.BindingFlags.SYNC_CREATE);
+            this._icon.connect('notify::translation-y', () => this._placeBadge());
         }
         if (!this._badge)
             return;
@@ -342,7 +367,9 @@ class DockItem extends St.Button {
         const size = M * this._icon.scale_x;
         const [, w] = this._badge.get_preferred_width(-1);
         const [, h] = this._badge.get_preferred_height(-1);
-        this._badge.set_position(Math.round(S / 2 + size / 2 - w * 0.7), Math.round(S - size - h * 0.3));
+        // translation, not set_position: this runs every magnify frame and must not relayout
+        this._badge.translation_x = Math.round(S / 2 + size / 2 - w * 0.7);
+        this._badge.translation_y = Math.round(S - size - h * 0.3) + this._icon.translation_y;
     }
 
     // Scroll on a running app's icon: switch between its windows in a fixed order.
@@ -764,7 +791,7 @@ class DockBar {
         this._tint = new St.Widget({style_class: 'mydock-bg', x_expand: true, y_expand: true});
         // the corner radius comes from the theme, which may resolve after the first layout
         this._bg.add_child(this._tint);
-        this._pillTint = new St.Widget({style_class: 'mydock-hidden-pill', x_expand: true, y_expand: true, opacity: 0});
+        this._pillTint = new St.Widget({style_class: 'mydock-hidden-pill', x_expand: true, y_expand: true, opacity: 0, visible: false});
         this._bg.add_child(this._pillTint);
         this._blur = new DockBlur(this);
         this._morph = 0;   // 0 = full dock, 1 = shrunk into the hidden pill (animated in _frame)
@@ -854,10 +881,14 @@ class DockBar {
                 this._timeline.stop();
         });
 
+        // The actor is monitor wide: only the background takes the X11 input region, so clicks
+        // next to the dock reach the windows below. Wayland has no input region.
         Main.layoutManager.addChrome(this.actor, {
             affectsStruts: !this.autohide,
+            affectsInputRegion: false,
             trackFullscreen: true,
         });
+        Main.layoutManager.trackChrome(this._bg, {affectsInputRegion: true, affectsStruts: false, trackFullscreen: false});
 
         if (this.autohide) {
             // 1px reactive strip at the bottom edge reveals the hidden dock.
@@ -868,7 +899,16 @@ class DockBar {
                     this.setHidden(false);
                 this.dock.queueHideCheck();
             });
-            this.box.connect('notify::allocation', () => this._placeStrip());
+            // moving another chrome actor inside an allocation signal: defer until after layout
+            this.box.connect('notify::allocation', () => {
+                if (this._stripQueued)
+                    return;
+                this._stripQueued = true;
+                this.dock.later(() => {
+                    this._stripQueued = false;
+                    this._placeStrip();
+                });
+            });
         }
 
         this._buildSpecials();
@@ -903,12 +943,8 @@ class DockBar {
         }
         if (s.get_boolean('show-clock')) {
             this._clock = makeClockIcon();
-            this._secondsId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
-                // no repaint while hidden / fullscreen / locked
-                if (this._clock.mapped && !this.hidden)
-                    this._clock.update();
-                return GLib.SOURCE_CONTINUE;
-            });
+            // seconds hand: ticks only while the clock is on screen (not hidden / fullscreen / locked)
+            this._clock.connect('notify::mapped', () => this._syncSeconds());
             this._specials.push(this._clockItem = new DockItem(this, this._clock, {
                 label: clockDate(),
                 onClick: () => launchAppId(CLOCKS_ID),
@@ -948,6 +984,26 @@ class DockBar {
         if (this._specials.length) {
             this._separator = separatorLine(this.geom, {y_align: Clutter.ActorAlign.CENTER});
         }
+    }
+
+    _syncSeconds() {
+        if (this._secondsId)
+            GLib.source_remove(this._secondsId);
+        this._secondsId = 0;
+        if (!this._clock.mapped)
+            return;
+        this._clock.update();
+        // first tick on the next second boundary, then every second
+        const ms = 1000 - Math.floor(GLib.get_real_time() / 1000) % 1000;
+        this._secondsId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
+            this._clock.update();
+            this._secondsId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
+                if (!this.hidden)
+                    this._clock.update();
+                return GLib.SOURCE_CONTINUE;
+            });
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     _updateTrash() {
@@ -1075,8 +1131,24 @@ class DockBar {
         return {x: this.actor.x + this.box.x, y: this.actor.y + this.box.y, width: this.box.width, height: this.box.height};
     }
 
+    // Stage x of a box child as the shown, unmagnified box would place it (box centered by the
+    // BinLayout, then padding P and spacing sp between visible children).
+    slotX(item) {
+        const {P, sp} = this.geom;
+        const [, boxW] = this.box.get_preferred_width(-1);
+        let x = this.actor.x + Math.floor((this.actor.width - boxW) / 2) + P;
+        for (const kid of this.box.get_children()) {
+            if (kid === item)
+                return x;
+            if (kid.visible)
+                x += kid.get_preferred_width(-1)[1] + sp;
+        }
+        return null;
+    }
+
     _placeStrip() {
-        // not get_transformed_position(): it is NaN while notify::allocation is being emitted
+        if (!this._strip)
+            return;     // bar destroyed before the later ran
         const x = this.actor.x + this.box.x;
         this._strip.set_position(Math.round(x), this.monitor.y + this.monitor.height - 1);
         this._strip.width = Math.max(1, Math.round(this.box.width));
@@ -1149,7 +1221,9 @@ class DockBar {
             ax = Math.max(mon.x + 8, Math.min(ax, mon.x + mon.width - a.width - 8));
             ay -= 2;
         }
-        a.set_position(ax, ay);
+        // translation, not set_position: this runs every magnify frame and must not relayout
+        a.translation_x = ax;
+        a.translation_y = ay;
     }
 
     // DND target interface (box._delegate = this)
@@ -1306,6 +1380,7 @@ class DockBar {
             this.box.opacity = Math.round(255 * Math.max(0, 1 - 2 * m));
             this._tint.opacity = Math.round(this._tintOpacity * (1 - m));
             this._pillTint.opacity = Math.round(255 * m);
+            this._pillTint.visible = m > 0;   // its box-shadow is not painted while it is invisible
         }
         if (this.hidden && m === 1 && this.box.visible)
             this.box.hide();   // invisible icons must not take clicks
@@ -1319,6 +1394,7 @@ class DockBar {
         this._timeline.stop();
         if (this._secondsId)
             GLib.source_remove(this._secondsId);
+        this._secondsId = 0;    // unmapping the clock below runs _syncSeconds()
         this._wallClock?.run_dispose();
         this._wallClock = null;
         this._trashMonitor?.cancel();
@@ -1327,6 +1403,7 @@ class DockBar {
         this._month?.destroy();
         this._month = this._shown = this._hoverItem = null;
         this._strip?.destroy();
+        this._strip = null;
         for (const item of [...this._items.values(), ...this._specials])
             item.destroy();
         this._items.clear();
@@ -1502,11 +1579,16 @@ export class Dock {
         const w = win ?? app.get_windows()[0];
         const bar = this._barFor(w ? w.get_monitor() : Main.layoutManager.primaryIndex);
         const item = bar?.itemFor(app);
-        // the auto-hidden dock hides its box; the icon still has a valid (last) allocation
         if (!item || !item.get_stage())
             return null;
-        const [x, y] = item.get_transformed_position();
         const {S} = bar.geom;
+        // the auto-hidden dock hides its box, which stops allocating it: an icon added or moved
+        // meanwhile has no or a stale allocation, so lay the slot out from preferred sizes
+        if (!bar.box.visible) {
+            const x = bar.slotX(item);
+            return x === null ? null : {x: Math.round(x), y: Math.round(bar.actor.y + bar.geom.P), width: S, height: S};
+        }
+        const [x, y] = item.get_transformed_position();
         // unmagnified slot position, as if the dock were shown
         return {
             x: Math.round(x - item.translation_x),
