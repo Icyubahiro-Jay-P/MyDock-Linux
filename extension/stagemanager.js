@@ -37,7 +37,7 @@ export class StageManager {
         this._peek = false;
         this._shown = false;
         this._rect = null;
-        this._titles = new Map();    // Shell.App -> title St.Label in the strip
+        this._buttons = new Map();   // app + window ids key -> group button in the strip
 
         this._strip = new St.BoxLayout({
             style_class: 'mydock-stage-strip',
@@ -121,7 +121,7 @@ export class StageManager {
         this._strip = this._edge = this._blur = this._stripBox = this._edgeBox = null;
         this._stage = null;
         this._mru = [];
-        this._titles.clear();
+        this._buttons.clear();
     }
 
     // trackFullscreen forces the tracked actor's `visible`, so track a wrapper
@@ -198,21 +198,30 @@ export class StageManager {
     // Put `app` on stage, minimize every other group. `activate` = user clicked
     // the strip, so also bring its windows back and focus the top one.
     _arrange(app, activate, fromActor = null) {
+        const groups = this._groups();
+        const stageWins = groups.get(app) ?? [];
+        // nothing of `app` can go on stage (e.g. its window is not eligible): minimizing every
+        // other group would leave an empty screen
+        if (!stageWins.length) {
+            this._queueSync();
+            return;
+        }
         this._setBusy();
         this._stage = app;
         this._peek = false;
         this._touch(app);
-        const groups = this._groups();
 
-        const stageWins = groups.get(app) ?? [];
         // clicked thumbnail: minimize.js flies these windows out of it instead of the dock genie
         if (fromActor) {
             const [x, y] = fromActor.get_transformed_position();
             const [width, height] = fromActor.get_transformed_size();
             this._ext.stageOpening ??= new Map();
             const time = GLib.get_monotonic_time();
-            for (const win of stageWins)
-                this._ext.stageOpening.set(win, {x, y, width, height, time});
+            for (const win of stageWins) {
+                // only minimized windows animate out of the thumbnail
+                if (win.minimized)
+                    this._ext.stageOpening.set(win, {x, y, width, height, time});
+            }
         }
         for (const win of stageWins) {
             // on focus changes only undo our own minimizes, not the user's
@@ -220,7 +229,7 @@ export class StageManager {
                 win.unminimize();
             this._ours.delete(win);
         }
-        if (activate && stageWins.length)
+        if (activate)
             Main.activateWindow(stageWins[stageWins.length - 1]);
 
         for (const [other, wins] of groups) {
@@ -284,26 +293,37 @@ export class StageManager {
         const mon = Main.layoutManager.primaryMonitor;
         // everything the strip shows; window-created also fires for menus/tooltips, so most
         // syncs change nothing and must not rebuild the clones. Titles are not in the key:
-        // browser tab-title churn only updates the labels in place below.
-        const key = [mon?.x, mon?.y, mon?.height, this._settings.get_int('stage-size'),
-            this._settings.get_boolean('stage-show-title'), ...apps.map(app =>
-                `${app.get_id()}:${groups.get(app).map(w => w.get_id()).join(',')}`)].join('|');
+        // the labels follow notify::title themselves.
+        const base = [mon?.x, mon?.y, mon?.height, this._settings.get_int('stage-size'),
+            this._settings.get_boolean('stage-show-title')].join('|');
+        const appKeys = apps.map(app => `${app.get_id()}:${groups.get(app).map(w => w.get_id()).join(',')}`);
+        const key = [base, ...appKeys].join('|');
         if (key === this._key) {
-            for (const [app, label] of this._titles) {
-                const wins = groups.get(app);
-                const text = wins[wins.length - 1].get_title() || app.get_name();
-                if (label.text !== text)
-                    label.text = text;
-            }
             this._updateReveal();
             return;
         }
         this._key = key;
 
-        this._titles.clear();
-        this._strip.destroy_all_children();
-        for (const app of apps)
-            this._strip.add_child(this._buildGroup(app, groups.get(app)));
+        // keep the groups whose app and windows are unchanged: a stage switch only swaps one
+        // group in and one out, the others keep their clones
+        if (base !== this._base) {
+            this._base = base;
+            this._strip.destroy_all_children();
+            this._buttons.clear();
+        }
+        const buttons = new Map();
+        apps.forEach((app, i) => {
+            const k = appKeys[i];
+            const button = this._buttons.get(k) ?? this._buildGroup(app, groups.get(app));
+            this._buttons.delete(k);
+            buttons.set(k, button);
+            if (button.get_parent() !== this._strip)
+                this._strip.insert_child_at_index(button, i);
+            else if (this._strip.get_child_at_index(i) !== button)
+                this._strip.set_child_at_index(button, i);
+        });
+        this._buttons.forEach(b => b.destroy());
+        this._buttons = buttons;
 
         if (!mon)
             return;
@@ -391,15 +411,17 @@ export class StageManager {
             ? new St.Icon({gicon, icon_size: ICON_SIZE, style_class: 'mydock-stage-icon'})
             : app.create_icon_texture(ICON_SIZE));
         if (this._settings.get_boolean('stage-show-title')) {
+            const win = wins[wins.length - 1];
             const label = new St.Label({
                 style_class: 'mydock-stage-title',
-                text: wins[wins.length - 1].get_title() || app.get_name(),
+                text: win.get_title() || app.get_name(),
                 y_align: Clutter.ActorAlign.CENTER,
             });
             label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
             label.style = `max-width: ${logical - ICON_SIZE}px;`;   // CSS px: St scales it
             row.add_child(label);
-            this._titles.set(app, label);
+            // browser tab-title churn: update the text in place (disconnected with the label)
+            win.connectObject('notify::title', () => (label.text = win.get_title() || app.get_name()), label);
         }
         box.add_child(row);
 
