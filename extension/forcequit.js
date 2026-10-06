@@ -9,8 +9,8 @@ import * as ModalDialog from 'resource:///org/gnome/shell/ui/modalDialog.js';
 let _dialog = null;
 
 // Kill every window of the app (SIGKILL on X11, the client connection on Wayland), then SIGKILL
-// its processes no other app shares: on Wayland a hung client survives losing its connection. An app with no windows
-// only gets a polite quit request.
+// its processes no other app shares: on Wayland a hung client survives losing its connection.
+// An app with no windows only gets a polite quit request.
 export function forceQuit(app) {
     const wins = app.get_windows();
     if (!wins.length) {
