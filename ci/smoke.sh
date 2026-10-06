@@ -44,7 +44,13 @@ dbus-run-session -- bash -c '
     gsettings set org.gnome.shell enabled-extensions "[\"$uuid\"]"
     # no update checks against GitHub during the test
     gs set "$schema" check-updates false
-    gnome-shell --headless --virtual-monitor 1920x1080 --wayland --no-x11 >"$log" 2>&1 &
+    # under gdb when installed (CI installs it where the shell crashes natively): a segfault then
+    # prints a backtrace into the log
+    dbg=()
+    command -v gdb >/dev/null && dbg=(env DEBUGINFOD_URLS= gdb -q -batch
+        -ex "handle SIGPIPE SIGUSR1 SIGUSR2 SIGCHLD nostop noprint pass"
+        -ex run -ex "thread apply all bt 30" --args)
+    "${dbg[@]}" gnome-shell --headless --virtual-monitor 1920x1080 --wayland --no-x11 >"$log" 2>&1 &
     shell=$!
     ext() { gdbus call --session --dest org.gnome.Shell --object-path /org/gnome/Shell \
         --method "org.gnome.Shell.Extensions.$1" "$uuid" 2>/dev/null; }
