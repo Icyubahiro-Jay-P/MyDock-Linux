@@ -223,6 +223,7 @@ export class Launchpad {
         tile.connect('clicked', () => {
             if (!this._swiped)
                 tile.launch();
+            this._swiped = false;   // keyboard activation after a swipe must launch
         });
         tile.connect('notify::pressed', () => iconBin.ease({
             scale_x: tile.pressed ? 0.9 : 1,
@@ -307,8 +308,8 @@ export class Launchpad {
     }
 
     _onPress(ev) {
-        if (ev.get_button() === Clutter.BUTTON_PRIMARY)
-            [this._pressX] = ev.get_coords();
+        // a non-primary press clears it, so a release after a press consumed elsewhere is ignored
+        this._pressX = ev.get_button() === Clutter.BUTTON_PRIMARY ? ev.get_coords()[0] : undefined;
         this._swiped = false;
         return Clutter.EVENT_PROPAGATE;
     }
