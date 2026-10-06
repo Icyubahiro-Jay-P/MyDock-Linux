@@ -295,7 +295,8 @@ export class StageManager {
         // syncs change nothing and must not rebuild the clones. Titles are not in the key:
         // the labels follow notify::title themselves.
         const base = [mon?.x, mon?.y, mon?.height, this._settings.get_int('stage-size'),
-            this._settings.get_boolean('stage-show-title')].join('|');
+            this._settings.get_boolean('stage-show-title'),
+            St.ThemeContext.get_for_stage(global.stage).scale_factor].join('|');
         const appKeys = apps.map(app => `${app.get_id()}:${groups.get(app).map(w => w.get_id()).join(',')}`);
         const key = [base, ...appKeys].join('|');
         if (key === this._key) {
