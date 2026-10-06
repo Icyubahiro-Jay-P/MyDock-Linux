@@ -46,8 +46,8 @@ dbus-run-session -- bash -c '
     gsettings set org.gnome.shell enabled-extensions "[\"$uuid\"]"
     # no update checks against GitHub during the test
     gs set "$schema" check-updates false
-    # prevent locale1 null deref in GNOME 47
-    gsettings set org.gnome.desktop.input-sources sources "[('xkb','us')]"
+    # prevent locale1 null deref in GNOME 47: set input source via gsettings (GVariant format)
+    gsettings set org.gnome.desktop.input-sources sources "@as [('xkb', 'us')]"
     # under gdb when installed (CI installs it where the shell crashes natively): a segfault then
     # prints a backtrace into the log
     dbg=()
