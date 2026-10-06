@@ -174,17 +174,29 @@ class DockBlur {
     // the band is as wide as the background ever gets (magnified icons plus a drop gap, or the
     // hidden pill), so it is only resized when the box changes width
     _syncLive(box, w, h) {
-        const bar = this._bar, actor = bar.actor, {S, M, sp} = bar.geom;
-        const bandW = Math.ceil(Math.max(w, bar.box.width + 3 * (M - S) + S + sp,
-            Math.min(PILL_W, bar.monitor.width * 0.6)));
-        if (bandW !== this._bandW || actor.height !== this._bandH) {
-            this._bandW = bandW;
-            this._bandH = actor.height;
-            this._band.set_size(bandW, actor.height);
-            // fixed position in the BinLayout: centered like the background
-            this._wrap.set_position(Math.round((actor.width - bandW) / 2), 0);
+        const bar = this._bar;
+        const bandW = Math.max(Math.ceil(w), bar.maxW);
+        if ((bandW !== this._bandW || bar.actor.height !== this._bandH) && !this._liveQueued) {
+            // resizing and moving actors from an allocation signal: defer until after layout
+            this._liveQueued = true;
+            bar.dock.later(() => {
+                this._liveQueued = false;
+                if (this._mode !== 'live')
+                    return;     // torn down meanwhile
+                const {actor} = this._bar, b = this._bar._bg.get_allocation_box();
+                this._bandW = Math.max(Math.ceil(b.get_width()), this._bar.maxW);
+                this._bandH = actor.height;
+                this._band.set_size(this._bandW, this._bandH);
+                // fixed position in the BinLayout: centered like the background
+                this._wrap.set_position(Math.round((actor.width - this._bandW) / 2), 0);
+                this._clipLive(b);
+            });
         }
-        this._wrap.set_clip(box.x1 - this._wrap.x, box.y1 - this._wrap.y, w, h);
+        this._clipLive(box);
+    }
+
+    _clipLive(box) {
+        this._wrap.set_clip(box.x1 - this._wrap.x, box.y1 - this._wrap.y, box.get_width(), box.get_height());
     }
 
     _teardown() {
@@ -193,6 +205,7 @@ class DockBlur {
         this._wrap?.destroy(); // takes the live band with it
         this._bgManager = this._wrap = this._inner = this._mask = this._band = this._effect = null;
         this._mode = this._bandW = this._bandH = null;
+        this._liveQueued = false;
     }
 
     destroy() {
@@ -804,6 +817,10 @@ class DockBar {
             this._radius = null;    // re-read the themed corner radius
             this._layoutBlur();
         });
+        // X11 input region (see addChrome below): invisible and non-reactive, resized from
+        // _frame() only when the dock's largest extent changes, never per magnify frame
+        this._inputArea = new St.Widget({x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.START});
+        this.actor.add_child(this._inputArea);
         this.actor.add_child(this._bg);
 
         this.box = new St.BoxLayout({
@@ -881,14 +898,16 @@ class DockBar {
                 this._timeline.stop();
         });
 
-        // The actor is monitor wide: only the background takes the X11 input region, so clicks
-        // next to the dock reach the windows below. Wayland has no input region.
+        // The actor is monitor wide: only _inputArea takes the X11 input region, so clicks
+        // next to the dock reach the windows below. Wayland has no input region. Not the
+        // background: LayoutManager pushes the region on every tracked allocation, and the
+        // background is resized every magnify frame.
         Main.layoutManager.addChrome(this.actor, {
             affectsStruts: !this.autohide,
             affectsInputRegion: false,
             trackFullscreen: true,
         });
-        Main.layoutManager.trackChrome(this._bg, {affectsInputRegion: true, affectsStruts: false, trackFullscreen: false});
+        Main.layoutManager.trackChrome(this._inputArea, {affectsInputRegion: true, affectsStruts: false, trackFullscreen: false});
 
         if (this.autohide) {
             // 1px reactive strip at the bottom edge reveals the hidden dock.
@@ -913,6 +932,13 @@ class DockBar {
 
         this._buildSpecials();
         this.restyle();
+    }
+
+    // widest the background gets: fully magnified icons plus a drop gap, or the hidden pill
+    get maxW() {
+        const {S, M, sp} = this.geom;
+        return Math.ceil(Math.max(this.box.width + 3 * (M - S) + S + sp,
+            Math.min(PILL_W, this.monitor.width * 0.6)));
     }
 
     get hovered() {
@@ -1381,6 +1407,17 @@ class DockBar {
             this._tint.opacity = Math.round(this._tintOpacity * (1 - m));
             this._pillTint.opacity = Math.round(255 * m);
             this._pillTint.visible = m > 0;   // its box-shadow is not painted while it is invisible
+        }
+        // input region: while shown, the largest extent incl. the magnified icons' headroom above
+        // the box (constant through magnify frames); while morphing or hidden, the background
+        // itself, so the region follows the slide (a translation alone does not refresh it)
+        const head = m === 0 ? M - S : 0;
+        const inW = m === 0 ? Math.max(this.maxW, bgW) : bgW, inH = bgH + head;
+        if (inW !== this._inW || inH !== this._inH) {
+            this._inW = inW;
+            this._inH = inH;
+            this._inputArea.translation_y = -head;
+            this._inputArea.set_size(inW, inH);
         }
         if (this.hidden && m === 1 && this.box.visible)
             this.box.hide();   // invisible icons must not take clicks
