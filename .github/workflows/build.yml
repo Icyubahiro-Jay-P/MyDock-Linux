@@ -47,11 +47,11 @@ jobs:
         run: |
           if command -v dnf >/dev/null; then
             dnf install -y --setopt=install_weak_deps=False \
-              gnome-shell dbus-daemon dbus-tools dconf gvfs glib2 python3 tar
+              gnome-shell gjs dbus-daemon dbus-tools dconf gvfs glib2 python3 tar
           else
             apt-get update
             DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-              gnome-shell dbus-daemon dconf-service libglib2.0-bin gvfs gvfs-daemons python3
+              gnome-shell gjs dbus-daemon dconf-service libglib2.0-bin gvfs gvfs-daemons python3
           fi
           v=$(gnome-shell --version)
           [[ "$v" == *"Shell ${{ matrix.gnome }}."* ]] || { echo "$v, expected GNOME ${{ matrix.gnome }}"; exit 1; }
