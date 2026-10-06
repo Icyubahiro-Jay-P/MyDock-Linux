@@ -48,6 +48,9 @@ jobs:
           if command -v dnf >/dev/null; then
             dnf install -y --setopt=install_weak_deps=False \
               gnome-shell gjs dbus-daemon dbus-tools dconf gvfs glib2 python3 tar
+            # ponytail: GNOME 47 segfaults natively; smoke.sh runs the shell under gdb for a
+            # backtrace. Drop once the crash is fixed.
+            if [ "${{ matrix.gnome }}" = 47 ]; then dnf install -y gdb; fi
           else
             apt-get update
             DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
