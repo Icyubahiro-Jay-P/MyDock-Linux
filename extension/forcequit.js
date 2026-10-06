@@ -9,7 +9,7 @@ import * as ModalDialog from 'resource:///org/gnome/shell/ui/modalDialog.js';
 let _dialog = null;
 
 // Kill every window of the app (SIGKILL on X11, the client connection on Wayland), then SIGKILL
-// its processes: on Wayland a hung client survives losing its connection. An app with no windows
+// its processes no other app shares: on Wayland a hung client survives losing its connection. An app with no windows
 // only gets a polite quit request.
 export function forceQuit(app) {
     const wins = app.get_windows();
@@ -19,6 +19,14 @@ export function forceQuit(app) {
     }
     const self = new Gio.Credentials().get_unix_pid();
     const pids = new Set(wins.map(w => w.get_pid()).filter(pid => pid > 1 && pid !== self));
+    // a process can host several apps (Chromium web apps, LibreOffice Writer/Calc): leave it at
+    // the window kills above unless every window it owns is this app's
+    const tracker = Shell.WindowTracker.get_default();
+    for (const actor of global.get_window_actors()) {
+        const w = actor.meta_window;
+        if (pids.has(w.get_pid()) && tracker.get_window_app(w) !== app)
+            pids.delete(w.get_pid());
+    }
     for (const w of wins)
         w.kill();
     for (const pid of pids) {
