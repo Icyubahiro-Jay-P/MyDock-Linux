@@ -195,6 +195,9 @@ export default class MyDockPrefs extends ExtensionPreferences {
         const darkId = styles.connect('notify::dark', syncDark);
         syncDark();
         window.connect('close-request', () => {
+            for (const id of settingsIds)
+                settings.disconnect(id);
+            settingsIds.length = 0;
             styles.disconnect(darkId);
             Gtk.StyleContext.remove_provider_for_display(display, css);
             return false;
@@ -486,9 +489,6 @@ export default class MyDockPrefs extends ExtensionPreferences {
         reset.add(resetRow);
 
         window.connect('close-request', () => {
-            for (const id of settingsIds)
-                settings.disconnect(id);
-            settingsIds.length = 0;
             cancellable?.cancel();
             if (copyTimer)
                 GLib.source_remove(copyTimer);
