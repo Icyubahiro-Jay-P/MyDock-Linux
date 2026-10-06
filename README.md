@@ -201,6 +201,10 @@ for t in extension/*.test.mjs; do node "$t"; done
 
 CI (`.github/workflows/build.yml`) runs on pushes to `main`, on `v*` tags and on pull requests: it starts a headless GNOME Shell 46, 47, 48, 49 and 50 with the extension and fails on any error it logs (`ci/smoke.sh`). Only when those pass does it run the tests, shellcheck and the build. Releases are published from the Actions tab with **Run workflow** (see [CONTRIBUTING.md](CONTRIBUTING.md#releasing-maintainers)), or by pushing a tag like `v1.2.0`.
 
+## Performance
+
+When idle, MyDock costs about the same as Ubuntu Dock. Under active use it adds about 9% of one CPU core, mostly from icon magnification. See [PERFORMANCE.md](PERFORMANCE.md) for the measurements and which settings to turn off on low-power machines.
+
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) for the macOS features that are planned next and how each one will be built.
