@@ -11,6 +11,7 @@ SCHEMA=org.gnome.shell.extensions.mydock
 WAIT=${SMOKE_WAIT:-60}  # seconds to wait for the extension to come up
 # run from a desktop terminal, these would point the headless shell at the real session
 unset DISPLAY GNOME_SHELL_SESSION_MODE GNOME_SETUP_DISPLAY WAYLAND_DISPLAY
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
 
 work=$(mktemp -d)
 # short path: unix socket paths are capped at 108 bytes and the shell puts its sockets here
@@ -40,10 +41,13 @@ echo "GNOME Shell: $(gnome-shell --version)"
 dbus-run-session -- bash -c '
     set -u
     uuid=$1 schema=$2 dest=$3 log=$4 wait=$5
+    export LANG=C.UTF-8 LC_ALL=C.UTF-8
     gs() { gsettings --schemadir "$dest/schemas" "$@"; }
     gsettings set org.gnome.shell enabled-extensions "[\"$uuid\"]"
     # no update checks against GitHub during the test
     gs set "$schema" check-updates false
+    # prevent locale1 null deref in GNOME 47
+    gsettings set org.gnome.desktop.input-sources sources "[('xkb','us')]"
     # under gdb when installed (CI installs it where the shell crashes natively): a segfault then
     # prints a backtrace into the log
     dbg=()
@@ -61,7 +65,7 @@ dbus-run-session -- bash -c '
         kill -0 "$shell" 2>/dev/null || { echo "gnome-shell exited early"; exit 1; }
         sleep 1
     done
-    active || { echo "Extension did not become active: $(ext GetExtensionInfo)"; kill "$shell"; exit 1; }
+    active || { echo "Extension did not become active: $(ext GetExtensionInfo)"; kill "$shell"; echo "--- gnome-shell log (first 200 lines) ---"; head -n 200 "$log"; exit 1; }
     echo "Extension is active"
     sleep 3
 
@@ -97,7 +101,15 @@ dbus-run-session -- bash -c '
     kill "$shell"; wait "$shell" 2>/dev/null
     [ "$ok" = 1 ] || { echo "Extension is not active after disable and enable"; exit 1; }
     echo "Extension is active after disable and enable"
-' smoke "$UUID" "$SCHEMA" "$dest" "$log" "$WAIT" || { echo "--- gnome-shell log ---"; cat "$log"; exit 1; }
+' smoke "$UUID" "$SCHEMA" "$dest" "$log" "$WAIT" || {
+    echo "--- gnome-shell log ---"
+    cat "$log"
+    if command -v rpm >/dev/null; then
+        echo "--- Fedora packages ---"
+        rpm -q gnome-shell mutter gnome-desktop4 glib2 ibus gnome-settings-daemon colord 2>/dev/null || true
+    fi
+    exit 1
+}
 
 # prefs.js runs in the Extensions app, not the shell: import it under gjs so a syntax or import
 # error fails here too. It needs the app's resource bundle and gnome-shell's private typelibs.
@@ -113,9 +125,10 @@ GI_TYPELIB_PATH="${shew%/*}" gjs -m "$work/prefs.mjs" "$dest" || { echo "prefs.j
 echo "prefs.js imports"
 
 # Anything the extension (or a shell API it misuses) logs as an error fails the run.
+# Distinguish infra (pre-extension) from extension errors by only scanning up to log.lines
 errors=$(head -n "$(cat "$log.lines")" "$log" | grep -E 'JS ERROR|JS WARNING|Gjs-CRITICAL|had error|MyDock|MY DOCK FINDER' || true)
 if [ -n "$errors" ]; then
-    echo "--- errors in the gnome-shell log ---"
+    echo "--- errors in the gnome-shell log (extension) ---"
     echo "$errors"
     echo "--- full log ---"
     cat "$log"
