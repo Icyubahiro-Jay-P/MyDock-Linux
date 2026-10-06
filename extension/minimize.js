@@ -20,7 +20,7 @@ import {genieVertex, suckVertex, targetSide} from './deform-math.js';
 
 const STRIP_PX = 3;     // one mesh strip per ~3px of window
 const MIN_STRIPS = 24;
-const MAX_STRIPS = 96;    // clone count cap; strips only exist while the animation runs
+const MAX_STRIPS = 200;   // clone count cap (one window at a time: concurrent ones use scale)
 const VERTEX = {genie: genieVertex, suck: suckVertex};
 const STAGE_MS = 520;       // Stage Manager fly-out (fixed: it is not the user's minimize effect)
 const STAGE_MAX_AGE = 2e6;  // us a recorded thumbnail rect stays valid for
@@ -166,14 +166,17 @@ export class MinimizeEffects {
             return;
         }
 
+        const state = {completed: false};   // set once completed_* ran (the stage path does it early)
         try {
-            this._animate(shellwm, actor, minimizing, effect, stage);
+            this._animate(shellwm, actor, minimizing, effect, stage, state);
         } catch (e) {
             logError(e, 'MyDock: minimize effect failed');
             const finish = this._active.get(actor);
             // failed before registering (e.g. a private WM field is gone): still complete once
             if (finish)
                 finish();
+            else if (state.completed)
+                return;
             else if (minimizing)
                 shellwm.completed_minimize(actor);
             else
@@ -181,7 +184,7 @@ export class MinimizeEffects {
         }
     }
 
-    _animate(shellwm, actor, minimizing, effect, stageRect = null) {
+    _animate(shellwm, actor, minimizing, effect, stageRect = null, state = {}) {
         // register first so any later failure still ends in exactly one completed_*
         (minimizing ? Main.wm._minimizing : Main.wm._unminimizing).add(actor);
         let timeline = null;
@@ -200,6 +203,7 @@ export class MinimizeEffects {
             mesh = null;
             actor.set_translation(0, 0, 0);
             actor.rotation_angle_y = 0;
+            state.completed = true;
             // resets transitions, scale, opacity, pivot and calls completed_* once
             if (minimizing)
                 Main.wm._minimizeWindowDone(shellwm, actor);
