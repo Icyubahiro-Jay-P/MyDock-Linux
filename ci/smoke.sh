@@ -43,11 +43,12 @@ dbus-run-session -- bash -c '
     uuid=$1 schema=$2 dest=$3 log=$4 wait=$5
     export LANG=C.UTF-8 LC_ALL=C.UTF-8
     gs() { gsettings --schemadir "$dest/schemas" "$@"; }
+    # prevent locale1 null deref in GNOME 47: set input source BEFORE shell starts
+    input_src="[('\''xkb'\'', '\''us'\'')]"
+    gsettings set org.gnome.desktop.input-sources sources "$input_src"
     gsettings set org.gnome.shell enabled-extensions "[\"$uuid\"]"
     # no update checks against GitHub during the test
     gs set "$schema" check-updates false
-    # prevent locale1 null deref in GNOME 47: set input source via gsettings (GVariant format)
-    gsettings set org.gnome.desktop.input-sources sources "@as [('xkb', 'us')]"
     # under gdb when installed (CI installs it where the shell crashes natively): a segfault then
     # prints a backtrace into the log
     dbg=()
