@@ -1352,8 +1352,22 @@ class ControlCenter extends StatusItem {
             menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
             menu.addAction('More Controls…', () => {
                 this.btn.menu.close();
-                qsMenu.sourceActor = this.btn;
+                // anchor it to our button only while open: PopupMenuManager picks menus by
+                // sourceActor, so a lasting swap would open the hidden one on hover
+                if (!this._qsUnanchor) {
+                    qsMenu.sourceActor = this.btn;
+                    const id = qsMenu.connect('open-state-changed', (_m, open) => !open && this._qsUnanchor?.(false));
+                    this._qsUnanchor = (close = true) => {
+                        this._qsUnanchor = null;
+                        qsMenu.disconnect(id);
+                        if (close)
+                            qsMenu.close();
+                        qsMenu.sourceActor = this._qsSource;
+                    };
+                }
                 qsMenu.toggle();
+                if (!qsMenu.isOpen)
+                    this._qsUnanchor?.(false);
             });
         }
 
@@ -1362,6 +1376,7 @@ class ControlCenter extends StatusItem {
 
     destroy() {
         delete Main.panel.toggleQuickSettings;
+        this._qsUnanchor?.();
         this._run(this._sigs); // stop detaching before the indicators go back
         const qs = this._qs;
         const box = qs?._indicators;
