@@ -46,16 +46,21 @@ jobs:
         shell: bash
         run: |
           if command -v dnf >/dev/null; then
+            dnf update -y --setopt=install_weak_deps=False || true
             dnf install -y --setopt=install_weak_deps=False \
-              gnome-shell gjs dbus-daemon dbus-tools dconf gvfs glib2 python3 tar
-            # ponytail: GNOME 47 segfaults natively; smoke.sh runs the shell under gdb for a
-            # backtrace. Drop once the crash is fixed.
-            if [ "${{ matrix.gnome }}" = 47 ]; then dnf install -y gdb; fi
+              gnome-shell gjs dbus-daemon dbus-tools dconf gvfs glib2 python3 tar \
+              systemd glibc-langpack-en ibus gnome-settings-daemon colord
+            # GNOME 47 needs full locale/input stack on the private system bus to avoid
+            # SIGSEGV in libgnome-desktop on_got_localed_proxy_for_getting_default_input_sources
+            if [ "${{ matrix.gnome }}" = 47 ]; then
+              dnf install -y gdb
+            fi
           else
             apt-get update
             DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
               gnome-shell gjs dbus-daemon dconf-service libglib2.0-bin gvfs gvfs-daemons python3
           fi
+          export LANG=C.UTF-8 LC_ALL=C.UTF-8
           v=$(gnome-shell --version)
           [[ "$v" == *"Shell ${{ matrix.gnome }}."* ]] || { echo "$v, expected GNOME ${{ matrix.gnome }}"; exit 1; }
       - run: bash ci/smoke.sh
