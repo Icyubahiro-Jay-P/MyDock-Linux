@@ -21,6 +21,9 @@ import * as BoxPointer from 'resource:///org/gnome/shell/ui/boxpointer.js';
 import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {AppMenu} from 'resource:///org/gnome/shell/ui/appMenu.js';
+import * as Config from 'resource:///org/gnome/shell/misc/config.js';
+
+const SHELL_MAJOR = parseInt(Config.PACKAGE_VERSION);
 
 import {makeMonthCalendar} from './calendar.js';
 
@@ -902,12 +905,15 @@ class DockBar {
         // next to the dock reach the windows below. Wayland has no input region. Not the
         // background: LayoutManager pushes the region on every tracked allocation, and the
         // background is resized every magnify frame.
+        // GNOME 50 dropped X11 and with it the affectsInputRegion param (passing it throws).
+        const x11Region = SHELL_MAJOR < 50;
         Main.layoutManager.addChrome(this.actor, {
             affectsStruts: !this.autohide,
-            affectsInputRegion: false,
+            ...x11Region ? {affectsInputRegion: false} : {},
             trackFullscreen: true,
         });
-        Main.layoutManager.trackChrome(this._inputArea, {affectsInputRegion: true, affectsStruts: false, trackFullscreen: false});
+        if (x11Region)
+            Main.layoutManager.trackChrome(this._inputArea, {affectsInputRegion: true, affectsStruts: false, trackFullscreen: false});
 
         if (this.autohide) {
             // 1px reactive strip at the bottom edge reveals the hidden dock.
