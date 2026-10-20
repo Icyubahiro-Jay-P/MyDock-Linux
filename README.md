@@ -25,7 +25,7 @@ Then **log out and back in**. Nothing needs sudo. Want to read the script first?
 - **Launchpad**: full-screen app grid, opened from the dock or with **Ctrl+Super+A**.
 - **Stage Manager**: a strip of recent window groups on the side of the screen. Off by default.
 - **Minimize effects**: genie, suck, scale or none, with adjustable duration.
-- **Window buttons on the left**: close, minimize and maximize move to the left of the title bar in macOS order, with optional red, yellow and green traffic light colors for GTK apps. Your old layout comes back when you turn it off.
+- **Window buttons on the left**: Close, minimize and maximize move to the left of the title bar in macOS order, with optional red, yellow and green traffic light colors for GTK apps. Your old layout comes back when you turn it off.
 - **Themes and dark mode**: follow the system color scheme or force light or dark; load your own theme folder.
 
 ## Requirements
